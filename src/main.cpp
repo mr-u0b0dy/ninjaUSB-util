@@ -147,6 +147,40 @@ private slots:
                     if (props & QLowEnergyCharacteristic::ExtendedProperty)
                       std::cout << " Extended";
                     std::cout << "\n";
+
+                    if ((props & QLowEnergyCharacteristic::Write) ||
+                        (props & QLowEnergyCharacteristic::WriteNoResponse)) {
+                      std::cout
+                          << "    → Writing data to this characteristic...\n";
+
+                      QByteArray data;
+                      data.append(static_cast<char>(0x02));
+                      data.append(static_cast<char>(0x00));
+                      data.append(static_cast<char>(0x04));
+                      data.append(static_cast<char>(0x05));
+                      data.append(static_cast<char>(0x00));
+                      data.append(static_cast<char>(0x00));
+
+                      service->writeCharacteristic(
+                          ch, data,
+                          (props & QLowEnergyCharacteristic::Write)
+                              ? QLowEnergyService::WriteWithResponse
+                              : QLowEnergyService::WriteWithoutResponse);
+
+                      QByteArray data2;
+                      data2.append(static_cast<char>(0x00));
+                      data2.append(static_cast<char>(0x00));
+                      data2.append(static_cast<char>(0x00));
+                      data2.append(static_cast<char>(0x00));
+                      data2.append(static_cast<char>(0x00));
+                      data2.append(static_cast<char>(0x00));
+
+                      service->writeCharacteristic(
+                          ch, data2,
+                          (props & QLowEnergyCharacteristic::Write)
+                              ? QLowEnergyService::WriteWithResponse
+                              : QLowEnergyService::WriteWithoutResponse);
+                    }
                   }
                 }
               });
