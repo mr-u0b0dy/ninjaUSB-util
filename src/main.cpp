@@ -109,13 +109,62 @@ private slots:
   }
 
   void onServiceDiscoveryFinished() {
-    std::cout << "Service discovery complete.\n";
+    std::cout << "Service discovery complete. Getting service details...\n";
 
-    // Disconnect cleanly to avoid BlueZ state warnings
+    const auto serviceUuids = controller->services();
+    for (const auto &uuid : serviceUuids) {
+      QLowEnergyService *service = controller->createServiceObject(uuid, this);
+      if (!service) {
+        std::cerr << "Cannot create service object for "
+                  << uuid.toString().toStdString() << "\n";
+        continue;
+      }
+
+      connect(service, &QLowEnergyService::stateChanged, this,
+              [this, service](QLowEnergyService::ServiceState state) {
+                if (state == QLowEnergyService::RemoteServiceDiscovered) {
+                  std::cout << "\n✅ Service "
+                            << service->serviceUuid().toString().toStdString()
+                            << " discovered\n";
+
+                  const auto characteristics = service->characteristics();
+                  for (const auto &ch : characteristics) {
+                    std::cout << "  Characteristic: "
+                              << ch.uuid().toString().toStdString() << "\n";
+
+                    auto props = ch.properties();
+                    std::cout << "    Properties:";
+                    if (props & QLowEnergyCharacteristic::Read)
+                      std::cout << " Read";
+                    if (props & QLowEnergyCharacteristic::Write)
+                      std::cout << " Write";
+                    if (props & QLowEnergyCharacteristic::WriteNoResponse)
+                      std::cout << " WriteNoResp";
+                    if (props & QLowEnergyCharacteristic::Notify)
+                      std::cout << " Notify";
+                    if (props & QLowEnergyCharacteristic::Indicate)
+                      std::cout << " Indicate";
+                    if (props & QLowEnergyCharacteristic::ExtendedProperty)
+                      std::cout << " Extended";
+                    std::cout << "\n";
+                  }
+                }
+              });
+
+      service->discoverDetails();
+      // service->push_back(service);
+    }
+
+    // Optionally: disconnect after all service details printed
     QTimer::singleShot(1000, this, [this]() {
-      std::cout << "Disconnecting...\n";
+      std::cout << "\nDone. Disconnecting...\n";
       controller->disconnectFromDevice();
     });
+
+    if (serviceUuids.isEmpty()) {
+      std::cout << "No services found.\n";
+      controller->disconnectFromDevice();
+    }
   }
 
   void onScanError(QBluetoothDeviceDiscoveryAgent::Error error) {
