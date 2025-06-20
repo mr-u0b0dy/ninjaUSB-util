@@ -42,30 +42,9 @@ std::map<int, uint8_t> linuxToHID = {
 std::set<uint8_t> pressedKeys;
 uint8_t modifiers = 0;
 
-std::array<uint8_t, 8> print_hid_report() {
-  std::array<uint8_t, 8> report = {0};
-  report[0] = modifiers;
-  size_t idx = 2;
-
-  for (uint8_t key : pressedKeys) {
-    if (key >= 0xE0 && key <= 0xE7)
-      continue; // Skip modifiers here
-    if (idx < 8)
-      report[idx++] = key;
-  }
-
-  // std::cout << "HID Report: [";
-  // for (uint8_t b : report) {
-  //   printf("0x%02X ", b);
-  // }
-  // std::cout << "]\n";
-
-  return report;
-}
-
-std::array<uint8_t, 8> handle_key_event(int code, int value) {
+void handle_key_event(int code, int value) {
   if (linuxToHID.find(code) == linuxToHID.end())
-    return std::array<uint8_t, 8>{0};
+    return;
   uint8_t hid_code = linuxToHID[code];
 
   if (hid_code >= 0xE0 && hid_code <= 0xE7) {
@@ -80,8 +59,6 @@ std::array<uint8_t, 8> handle_key_event(int code, int value) {
     else if (value == 0)
       pressedKeys.erase(hid_code);
   }
-
-  return print_hid_report();
 }
 
 struct KeyboardDevice {
@@ -123,17 +100,13 @@ std::vector<KeyboardDevice> find_all_keyboards() {
 
     if (libevdev_has_event_type(evdev, EV_KEY) &&
         libevdev_has_event_code(evdev, EV_KEY, KEY_A)) {
-      std::cout << "Using device: " << devnode << " ("
-                << libevdev_get_name(evdev) << ")\n";
       keyboards.push_back({fd, evdev});
     } else {
       libevdev_free(evdev);
       close(fd);
     }
-
     udev_device_unref(dev);
   }
-
   udev_enumerate_unref(enumerate);
   udev_unref(udev);
   return keyboards;
@@ -156,7 +129,6 @@ public:
     connect(discoveryAgent, &QBluetoothDeviceDiscoveryAgent::errorOccurred,
             this, &BLEScanner::onScanError);
 
-    std::cout << "Starting BLE device scan...\n";
     discoveryAgent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
   }
 
@@ -165,17 +137,12 @@ private slots:
     if (!(info.coreConfigurations() &
           QBluetoothDeviceInfo::LowEnergyCoreConfiguration))
       return;
-
     for (const auto &d : devices)
       if (d.address() == info.address())
-        return; // Already added
-
+        return;
     devices.push_back(info);
-
-    std::cout
-        << devices.size() - 1 << ") "
-        << (info.name().isEmpty() ? "(unknown)" : info.name()).toStdString()
-        << " [" << info.address().toString().toStdString() << "]\n";
+    std::cout << devices.size() - 1 << ") " << info.name().toStdString() << " ["
+              << info.address().toString().toStdString() << "]\n";
   }
 
   void onScanFinished() {
@@ -184,203 +151,96 @@ private slots:
       QCoreApplication::quit();
       return;
     }
-
-    std::cout << "\nScan complete. Enter device index to connect: ";
+    std::cout << "Select device index to connect: ";
     int index = -1;
     std::cin >> index;
-
     if (index < 0 || index >= static_cast<int>(devices.size())) {
       std::cerr << "Invalid index.\n";
       QCoreApplication::quit();
       return;
     }
-
     selectedDevice = devices[index];
     connectToDevice();
   }
 
   void connectToDevice() {
-    std::cout << "Connecting to: " << selectedDevice.name().toStdString()
-              << " [" << selectedDevice.address().toString().toStdString()
-              << "]\n";
-
     controller.reset(QLowEnergyController::createCentral(selectedDevice, this));
-
     connect(controller.get(), &QLowEnergyController::connected, this,
             &BLEScanner::onConnected);
-    connect(controller.get(), &QLowEnergyController::disconnected, this,
-            &BLEScanner::onDisconnected);
-    connect(controller.get(), &QLowEnergyController::errorOccurred, this,
-            &BLEScanner::onControllerError);
     connect(controller.get(), &QLowEnergyController::serviceDiscovered, this,
             &BLEScanner::onServiceDiscovered);
     connect(controller.get(), &QLowEnergyController::discoveryFinished, this,
             &BLEScanner::onServiceDiscoveryFinished);
-
     controller->connectToDevice();
   }
 
-  void onConnected() {
-    std::cout << "Connected. Discovering services...\n";
-    controller->discoverServices();
-  }
-
-  void onDisconnected() {
-    std::cout << "Disconnected. Exiting...\n";
-    QCoreApplication::quit();
-  }
-
-  void onControllerError(QLowEnergyController::Error error) {
-    std::cerr << "Connection error: " << controller->errorString().toStdString()
-              << "\n";
-    QCoreApplication::quit();
-  }
+  void onConnected() { controller->discoverServices(); }
 
   void onServiceDiscovered(const QBluetoothUuid &uuid) {
-    std::cout << "Service found: " << uuid.toString().toStdString() << "\n";
+    std::cout << "Discovered service: " << uuid.toString().toStdString()
+              << "\n";
   }
 
   void onServiceDiscoveryFinished() {
-    std::cout << "Service discovery complete. Getting service details...\n";
-
-    const auto serviceUuids = controller->services();
-    for (const auto &uuid : serviceUuids) {
+    for (const auto &uuid : controller->services()) {
       QLowEnergyService *service = controller->createServiceObject(uuid, this);
-      if (!service) {
-        std::cerr << "Cannot create service object for "
-                  << uuid.toString().toStdString() << "\n";
+      if (!service)
         continue;
-      }
 
       connect(service, &QLowEnergyService::stateChanged, this,
               [this, service](QLowEnergyService::ServiceState state) {
                 if (state == QLowEnergyService::RemoteServiceDiscovered) {
-                  std::cout << "\n✅ Service "
-                            << service->serviceUuid().toString().toStdString()
-                            << " discovered\n";
-
-                  const auto characteristics = service->characteristics();
-                  for (const auto &ch : characteristics) {
-                    std::cout << "  Characteristic: "
-                              << ch.uuid().toString().toStdString() << "\n";
-
+                  for (const auto &ch : service->characteristics()) {
                     auto props = ch.properties();
-                    std::cout << "    Properties:";
-                    if (props & QLowEnergyCharacteristic::Read)
-                      std::cout << " Read";
-                    if (props & QLowEnergyCharacteristic::Write)
-                      std::cout << " Write";
-                    if (props & QLowEnergyCharacteristic::WriteNoResponse)
-                      std::cout << " WriteNoResp";
-                    if (props & QLowEnergyCharacteristic::Notify)
-                      std::cout << " Notify";
-                    if (props & QLowEnergyCharacteristic::Indicate)
-                      std::cout << " Indicate";
-                    if (props & QLowEnergyCharacteristic::ExtendedProperty)
-                      std::cout << " Extended";
-                    std::cout << "\n";
-
                     if ((props & QLowEnergyCharacteristic::Write) ||
                         (props & QLowEnergyCharacteristic::WriteNoResponse)) {
-                      std::cout
-                          << "    → Writing data to this characteristic...\n";
-
-                      // QByteArray data;
-                      // data.append(static_cast<char>(0x02));
-                      // data.append(static_cast<char>(0x00));
-                      // data.append(static_cast<char>(0x04));
-                      // data.append(static_cast<char>(0x05));
-                      // data.append(static_cast<char>(0x00));
-                      // data.append(static_cast<char>(0x00));
-                      //
-                      // service->writeCharacteristic(
-                      //     ch, data,
-                      //     (props & QLowEnergyCharacteristic::Write)
-                      //         ? QLowEnergyService::WriteWithResponse
-                      //         : QLowEnergyService::WriteWithoutResponse);
-                      //
-                      // QByteArray data2;
-                      // data2.append(static_cast<char>(0x00));
-                      // data2.append(static_cast<char>(0x00));
-                      // data2.append(static_cast<char>(0x00));
-                      // data2.append(static_cast<char>(0x00));
-                      // data2.append(static_cast<char>(0x00));
-                      // data2.append(static_cast<char>(0x00));
-
-                      // service->writeCharacteristic(
-                      //     ch, data2,
-                      //     (props & QLowEnergyCharacteristic::Write)
-                      //         ? QLowEnergyService::WriteWithResponse
-                      //         : QLowEnergyService::WriteWithoutResponse);
+                      writeChar = ch;
+                      targetService = service;
+                      startPolling();
+                      return;
                     }
                   }
                 }
               });
-
       service->discoverDetails();
-      // service->push_back(service);
     }
+  }
 
-    QTimer::singleShot(3000, this, [this]() {
-      std::vector<struct pollfd> fds;
-      for (const auto &kbd : keyboards) {
-        fds.push_back({kbd.fd, POLLIN, 0});
-      }
-      std::cout << "\nStarting ...\n";
-      const auto serviceUuids = controller->services();
-      QLowEnergyService *service =
-          controller->createServiceObject(serviceUuids[0], this);
-      std::cout << "\n✅ Service "
-                << service->serviceUuid().toString().toStdString()
-                << " discovered\n";
+  void startPolling() {
+    keyPollTimer = new QTimer(this);
+    connect(keyPollTimer, &QTimer::timeout, this, [this]() {
+      if (poll(fds.data(), fds.size(), 0) > 0) {
+        for (size_t i = 0; i < keyboards.size(); ++i) {
+          if (fds[i].revents & POLLIN) {
+            struct input_event ev;
+            while (libevdev_next_event(keyboards[i].dev,
+                                       LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0) {
+              if (ev.type == EV_KEY) {
+                handle_key_event(ev.code, ev.value);
 
-      const auto characteristics = service->characteristics();
-      // auto props = characteristics[0].properties();
-      std::cout << "  Characteristic: "
-                << characteristics[0].uuid().toString().toStdString() << "\n";
-      while (true) {
-        if (poll(fds.data(), fds.size(), -1) > 0) {
-          for (size_t i = 0; i < keyboards.size(); ++i) {
-            if (fds[i].revents & POLLIN) {
-              struct input_event ev;
-              while (libevdev_next_event(keyboards[i].dev,
-                                         LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0) {
-                if (ev.type == EV_KEY) {
-                  std::array<uint8_t, 8> report = {0};
-                  report = handle_key_event(ev.code, ev.value);
-                  QByteArray data(reinterpret_cast<const char *>(report.data()),
-                                  report.size());
-                  std::cout << "Sending HID Report: ";
-                  for (auto byte : data) {
-                    printf("%02X ", static_cast<uint8_t>(byte));
-                  }
-                  std::cout << "\n";
-                  service->writeCharacteristic(
-                      characteristics[0], data,
-                      QLowEnergyService::WriteWithoutResponse);
-
-                  QByteArray data2(8, 0x00);
-                  service->writeCharacteristic(
-                      characteristics[0], data2,
-                      QLowEnergyService::WriteWithoutResponse);
+                std::array<uint8_t, 8> report = {0};
+                report[0] = modifiers;
+                size_t idx = 2;
+                for (uint8_t key : pressedKeys) {
+                  if (key >= 0xE0 && key <= 0xE7)
+                    continue;
+                  if (idx < 8)
+                    report[idx++] = key;
                 }
+                QByteArray data(reinterpret_cast<const char *>(report.data()),
+                                report.size());
+                targetService->writeCharacteristic(
+                    writeChar, data,
+                    (writeChar.properties() & QLowEnergyCharacteristic::Write)
+                        ? QLowEnergyService::WriteWithResponse
+                        : QLowEnergyService::WriteWithoutResponse);
               }
             }
           }
         }
       }
     });
-
-    // Optionally: disconnect after all service details printed
-    QTimer::singleShot(3000, this, [this]() {
-      std::cout << "\nDone. Disconnecting...\n";
-      controller->disconnectFromDevice();
-    });
-
-    if (serviceUuids.isEmpty()) {
-      std::cout << "No services found.\n";
-      controller->disconnectFromDevice();
-    }
+    keyPollTimer->start(10);
   }
 
   void onScanError(QBluetoothDeviceDiscoveryAgent::Error error) {
@@ -394,32 +254,32 @@ private:
   std::vector<QBluetoothDeviceInfo> devices;
   QBluetoothDeviceInfo selectedDevice;
   std::unique_ptr<QLowEnergyController> controller;
+  QLowEnergyCharacteristic writeChar;
+  QLowEnergyService *targetService = nullptr;
   std::vector<KeyboardDevice> &keyboards;
   std::vector<struct pollfd> &fds;
+  QTimer *keyPollTimer = nullptr;
 };
 
 #include "main.moc"
 
 int main(int argc, char *argv[]) {
+  QCoreApplication app(argc, argv);
 
   auto keyboards = find_all_keyboards();
   if (keyboards.empty()) {
     std::cerr << "No keyboards found.\n";
     return 1;
   }
-
-  std::cout << "Monitoring keyboard input and printing HID reports...\n";
-
   std::vector<struct pollfd> fds;
-  QCoreApplication app(argc, argv);
+  for (const auto &kbd : keyboards)
+    fds.push_back({kbd.fd, POLLIN, 0});
+
   BLEScanner scanner(keyboards, fds);
-
   int result = app.exec();
-
   for (auto &kbd : keyboards) {
     libevdev_free(kbd.dev);
     close(kbd.fd);
   }
-
   return result;
 }
