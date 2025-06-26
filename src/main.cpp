@@ -1,172 +1,210 @@
-#include "hid_keycodes.hpp"
-#include <array>
-#include <cstdint>
+#include "hid_keycodes.hpp" // our header with maps + helpers
+#include <atomic>
+#include <csignal>
 #include <cstring>
 #include <fcntl.h>
 #include <iostream>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
 #include <poll.h>
-#include <set>
+#include <string>
 #include <unistd.h>
 #include <vector>
 
-std::set<uint8_t> pressedKeys;
-uint8_t modifiers = 0;
+// ---------------------------------------------------------------------------
+//  Global state & signal handling
+// ---------------------------------------------------------------------------
+std::atomic<bool> g_running{true};
 
-void print_hid_report() {
-  std::array<uint8_t, 8> report = {0};
-  report[0] = modifiers;
-  size_t idx = 2;
-
-  for (uint8_t key : pressedKeys) {
-    if (key >= 0xE0 && key <= 0xE7)
-      continue; // Skip modifiers here
-    if (idx < 8)
-      report[idx++] = key;
-  }
-
-  std::cout << "HID Report: [";
-  for (uint8_t b : report) {
-    printf("0x%02X ", b);
-  }
-  std::cout << "]\n";
+void signal_handler(int signum) {
+  std::cout << "\nCaught signal " << signum << ", exiting...\n";
+  g_running = false;
 }
 
-void print_consumer_report(uint16_t usage_id) {
-  // This is a 2-byte report: little endian HID usage ID from consumer page
-  // (0x0C)
-  std::array<uint8_t, 2> report;
-  report[0] = usage_id & 0xFF;
-  report[1] = (usage_id >> 8) & 0xFF;
-
-  std::cout << "Consumer HID Report: [";
-  for (uint8_t b : report)
-    printf("0x%02X ", b);
-  std::cout << "]  (Usage ID: 0x" << std::hex << usage_id << ")\n";
-}
-void handle_key_event(int code, int value) {
-  // First check if it's a standard keyboard key
-  auto it = linuxToHID.find(code);
-  if (it != linuxToHID.end()) {
-    uint8_t hid_code = it->second;
-    if (hid_code >= 0xE0 && hid_code <= 0xE7) {
-      uint8_t bit = 1 << (hid_code - 0xE0);
-      if (value == 1)
-        modifiers |= bit;
-      else if (value == 0)
-        modifiers &= ~bit;
-    } else {
-      if (value == 1)
-        pressedKeys.insert(hid_code);
-      else if (value == 0)
-        pressedKeys.erase(hid_code);
-    }
-    print_hid_report();
-    return;
-  }
-
-  // If it's a consumer/media key
-  auto it2 = linuxToConsumerHID.find(code);
-  if (it2 != linuxToConsumerHID.end()) {
-    if (value == 1) {
-      print_consumer_report(it2->second);
-    } else {
-      print_consumer_report(0); // Key released = send empty report
-    }
-    return;
-  }
-
-  // Otherwise: unknown or unsupported key
-}
-
+// ---------------------------------------------------------------------------
+//  Device wrapper
+// ---------------------------------------------------------------------------
 struct KeyboardDevice {
-  int fd;
-  libevdev *dev;
+  int fd{-1};
+  libevdev *evdev{nullptr};
+  std::string path; // /dev/input/eventX
 };
 
-std::vector<KeyboardDevice> find_all_keyboards() {
-  std::vector<KeyboardDevice> keyboards;
-  struct udev *udev = udev_new();
-  struct udev_enumerate *enumerate = udev_enumerate_new(udev);
-  udev_enumerate_add_match_subsystem(enumerate, "input");
-  udev_enumerate_scan_devices(enumerate);
-
-  struct udev_list_entry *devices = udev_enumerate_get_list_entry(enumerate);
-  struct udev_list_entry *entry;
-
-  udev_list_entry_foreach(entry, devices) {
-    const char *path = udev_list_entry_get_name(entry);
-    struct udev_device *dev = udev_device_new_from_syspath(udev, path);
-    const char *devnode = udev_device_get_devnode(dev);
-    if (!devnode || !strstr(devnode, "event")) {
-      udev_device_unref(dev);
-      continue;
-    }
-
-    int fd = open(devnode, O_RDONLY | O_NONBLOCK);
-    if (fd < 0) {
-      udev_device_unref(dev);
-      continue;
-    }
-
-    libevdev *evdev = nullptr;
-    if (libevdev_new_from_fd(fd, &evdev) < 0) {
-      close(fd);
-      udev_device_unref(dev);
-      continue;
-    }
-
-    if (libevdev_has_event_type(evdev, EV_KEY) &&
-        libevdev_has_event_code(evdev, EV_KEY, KEY_A)) {
-      std::cout << "Using device: " << devnode << " ("
-                << libevdev_get_name(evdev) << ")\n";
-      keyboards.push_back({fd, evdev});
-    } else {
-      libevdev_free(evdev);
-      close(fd);
-    }
-
-    udev_device_unref(dev);
-  }
-
-  udev_enumerate_unref(enumerate);
-  udev_unref(udev);
-  return keyboards;
+// ---------------------------------------------------------------------------
+//  Helpers to open / close keyboard devices
+// ---------------------------------------------------------------------------
+static bool is_keyboard(libevdev *dev) {
+  return libevdev_has_event_type(dev, EV_KEY) &&
+         libevdev_has_event_code(dev, EV_KEY, KEY_A);
 }
 
+KeyboardDevice open_keyboard(const std::string &devnode) {
+  KeyboardDevice kbd{};
+  kbd.path = devnode;
+
+  int fd = open(devnode.c_str(), O_RDONLY | O_NONBLOCK);
+  if (fd < 0)
+    return kbd;
+
+  libevdev *evdev = nullptr;
+  if (libevdev_new_from_fd(fd, &evdev) < 0) {
+    close(fd);
+    return kbd;
+  }
+
+  if (!is_keyboard(evdev)) {
+    libevdev_free(evdev);
+    close(fd);
+    return kbd;
+  }
+
+  kbd.fd = fd;
+  kbd.evdev = evdev;
+  std::cout << "[+] Added keyboard: " << devnode << " ("
+            << libevdev_get_name(evdev) << ")\n";
+  return kbd;
+}
+
+void close_keyboard(KeyboardDevice &kbd) {
+  if (kbd.evdev)
+    libevdev_free(kbd.evdev);
+  if (kbd.fd >= 0)
+    close(kbd.fd);
+  std::cout << "[-] Removed keyboard: " << kbd.path << "\n";
+  kbd.fd = -1;
+  kbd.evdev = nullptr;
+}
+
+// ---------------------------------------------------------------------------
+//  Discover existing keyboards at startup
+// ---------------------------------------------------------------------------
+std::vector<KeyboardDevice> enumerate_keyboards(struct udev *udev) {
+  std::vector<KeyboardDevice> out;
+  struct udev_enumerate *enu = udev_enumerate_new(udev);
+  udev_enumerate_add_match_subsystem(enu, "input");
+  udev_enumerate_scan_devices(enu);
+
+  udev_list_entry *devices = udev_enumerate_get_list_entry(enu);
+  udev_list_entry *entry;
+  udev_list_entry_foreach(entry, devices) {
+    const char *syspath = udev_list_entry_get_name(entry);
+    udev_device *dev = udev_device_new_from_syspath(udev, syspath);
+    const char *devnode = udev_device_get_devnode(dev);
+    if (devnode && strstr(devnode, "event")) {
+      KeyboardDevice k = open_keyboard(devnode);
+      if (k.fd >= 0)
+        out.push_back(std::move(k));
+    }
+    udev_device_unref(dev);
+  }
+  udev_enumerate_unref(enu);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+//  Main
+// ---------------------------------------------------------------------------
 int main() {
-  auto keyboards = find_all_keyboards();
-  if (keyboards.empty()) {
-    std::cerr << "No keyboards found.\n";
+  // Install CTRL+C handler
+  signal(SIGINT, signal_handler);
+  signal(SIGTERM, signal_handler);
+
+  struct udev *udev = udev_new();
+  if (!udev) {
+    std::cerr << "Failed to init udev\n";
     return 1;
   }
 
-  std::vector<struct pollfd> fds;
-  for (const auto &kbd : keyboards) {
-    fds.push_back({kbd.fd, POLLIN, 0});
-  }
+  // Initial enumeration
+  std::vector<KeyboardDevice> keyboards = enumerate_keyboards(udev);
 
-  std::cout << "Monitoring keyboard input and printing HID reports...\n";
+  // udev monitor for hotplug events
+  struct udev_monitor *mon = udev_monitor_new_from_netlink(udev, "udev");
+  udev_monitor_filter_add_match_subsystem_devtype(mon, "input", nullptr);
+  udev_monitor_enable_receiving(mon);
+  int mon_fd = udev_monitor_get_fd(mon);
 
-  while (true) {
-    if (poll(fds.data(), fds.size(), -1) > 0) {
-      for (size_t i = 0; i < keyboards.size(); ++i) {
-        if (fds[i].revents & POLLIN) {
-          struct input_event ev;
-          while (libevdev_next_event(keyboards[i].dev,
-                                     LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0) {
-            if (ev.type == EV_KEY) {
-              handle_key_event(ev.code, ev.value);
+  // Poll list setup
+  std::vector<struct pollfd> pfds;
+  auto rebuild_pollfds = [&]() {
+    pfds.clear();
+    // keyboard fds
+    for (auto &k : keyboards) {
+      pfds.push_back({k.fd, POLLIN, 0});
+    }
+    // udev monitor fd
+    pfds.push_back({mon_fd, POLLIN, 0});
+  };
+
+  rebuild_pollfds();
+
+  hid::KeyboardState kb_state;
+
+  std::cout << "Monitoring keyboards (hot‑plug supported)…\n";
+
+  while (g_running) {
+    if (poll(pfds.data(), pfds.size(), -1) <= 0)
+      continue;
+
+    // Handle input from keyboards
+    for (size_t i = 0; i < keyboards.size(); ++i) {
+      if (pfds[i].revents & POLLIN) {
+        input_event ev;
+        while (libevdev_next_event(keyboards[i].evdev,
+                                   LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0) {
+          if (ev.type != EV_KEY)
+            continue;
+
+          if (hid::apply_key_event(kb_state, ev.code, ev.value)) {
+            // Print keyboard 8‑byte report
+            std::cout << "Keyboard HID: [";
+            for (auto b : kb_state.report)
+              printf("0x%02X ", b);
+            std::cout << "]\n";
+          } else {
+            auto rep = hid::consumer_report(ev.code, ev.value);
+            if (rep[0] != 0 || rep[1] != 0) {
+              printf("Consumer HID: [0x%02X 0x%02X]\n", rep[0], rep[1]);
             }
           }
         }
       }
     }
+
+    // Handle udev hotplug events (monitor is at last index)
+    if (pfds.back().revents & POLLIN) {
+      udev_device *dev = udev_monitor_receive_device(mon);
+      if (dev) {
+        const char *action = udev_device_get_action(dev);
+        const char *devnode = udev_device_get_devnode(dev);
+        if (devnode && strstr(devnode, "event")) {
+          if (strcmp(action, "add") == 0) {
+            KeyboardDevice k = open_keyboard(devnode);
+            if (k.fd >= 0) {
+              keyboards.push_back(std::move(k));
+              rebuild_pollfds();
+            }
+          } else if (strcmp(action, "remove") == 0) {
+            // find matching path
+            for (auto it = keyboards.begin(); it != keyboards.end(); ++it) {
+              if (it->path == devnode) {
+                close_keyboard(*it);
+                keyboards.erase(it);
+                rebuild_pollfds();
+                break;
+              }
+            }
+          }
+        }
+        udev_device_unref(dev);
+      }
+    }
   }
 
-  for (auto &kbd : keyboards) {
-    libevdev_free(kbd.dev);
-    close(kbd.fd);
-  }
+  // Cleanup
+  for (auto &k : keyboards)
+    close_keyboard(k);
+  udev_monitor_unref(mon);
+  udev_unref(udev);
+  return 0;
 }
