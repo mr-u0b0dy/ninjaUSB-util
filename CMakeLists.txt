@@ -17,8 +17,9 @@ add_executable(${PROJECT_NAME} src/main.cpp)
 # set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE
 # MACOSX_BUNDLE TRUE)
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${LIBUDEV_INCLUDE_DIRS}
-                                                   ${LIBEVDEV_INCLUDE_DIRS})
+target_include_directories(
+  ${PROJECT_NAME} PRIVATE src/inc ${LIBUDEV_INCLUDE_DIRS}
+                          ${LIBEVDEV_INCLUDE_DIRS})
 target_link_libraries(
   ${PROJECT_NAME} PRIVATE ${LIBUDEV_LINK_LIBRARIES} ${LIBEVDEV_LINK_LIBRARIES}
                           Qt6::Core Qt6::Bluetooth)
