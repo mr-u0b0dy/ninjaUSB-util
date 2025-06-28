@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: Apache-2.0
-// SPDX-FileCopyrightText: 2025 Dharun A P
-
 /**
  * @file test_device_manager.cpp
  * @brief Basic unit tests for device manager functionality
+ * @author Dharun A P
+ * @license SPDX-License-Identifier: Apache-2.0
+ * @copyright SPDX-FileCopyrightText: 2025 Dharun A P
  */
 
 #include "device_manager.hpp"

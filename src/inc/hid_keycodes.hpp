@@ -1,15 +1,64 @@
-// SPDX-License-Identifier: Apache-2.0
-// SPDX-FileCopyrightText: 2025 Dharun A P
+/**
+ * @file hid_keycodes.hpp
+ * @brief HID keyboard mapping and report generation utilities
+ * @author Dharun A P
+ * @date 2025
+ * @copyright Copyright (c) 2025 Dharun A P
+ * @license SPDX-License-Identifier: Apache-2.0
+ * 
+ * This module provides comprehensive mapping between Linux input event codes
+ * and USB HID usage codes, along with utilities for generating standard HID
+ * keyboard reports. It supports both standard keyboard input and consumer
+ * control functions.
+ * 
+ * @section HIDStandard HID Standard Compliance
+ * This implementation follows the USB HID specification for keyboard devices:
+ * - Keyboard/Keypad Usage Page (0x07) for standard keys
+ * - Consumer Control Usage Page (0x0C) for media keys
+ * - Standard 8-byte keyboard report format
+ * - Modifier key handling according to HID specification
+ * 
+ * @section ReportFormat Keyboard Report Format
+ * Standard HID keyboard reports are 8 bytes:
+ * - Byte 0: Modifier keys bitmap (Ctrl, Alt, Shift, etc.)
+ * - Byte 1: Reserved (always 0)
+ * - Bytes 2-7: Up to 6 simultaneous key codes (non-modifier keys)
+ * 
+ * @section KeyMapping Key Mapping
+ * The module provides bidirectional mapping:
+ * - Linux KEY_* codes → USB HID usage codes
+ * - Support for 104-key US layout
+ * - Function keys, arrow keys, and keypad
+ * - Modifier key detection and handling
+ * - Media and consumer control keys
+ * 
+ * @section Usage Usage Example
+ * @code
+ * hid::KeyboardState state;
+ * 
+ * // Process key press
+ * state.press_key(KEY_A);
+ * state.press_key(KEY_LEFTCTRL);
+ * 
+ * // Generate HID report
+ * auto report = state.generate_report();
+ * 
+ * // Process key release
+ * state.release_key(KEY_A);
+ * @endcode
+ */
 
 #pragma once
-//  ---------------------------------------------------------------------------
-//  HID Keycode Maps & Helpers
-//  ---------------------------------------------------------------------------
-//  * Linux KEY_* -> USB HID Usage IDs (Keyboard/Keypad page 0x07)
-//  * Linux KEY_* -> Consumer‑Control Usage IDs (Consumer page 0x0C)
+
+// ---------------------------------------------------------------------------
+//  HID Keycode Maps & Report Generation
+// ---------------------------------------------------------------------------
+//  * Linux KEY_* → USB HID Usage IDs (Keyboard/Keypad page 0x07)
+//  * Linux KEY_* → Consumer‑Control Usage IDs (Consumer page 0x0C)
 //  * Lightweight helper utilities to build 8‑byte keyboard reports and
 //    2‑byte consumer‑control reports.
-//  ---------------------------------------------------------------------------
+//  * Complete modifier key handling and key state management
+// ---------------------------------------------------------------------------
 
 #include <linux/input-event-codes.h>  // Linux KEY_* codes
 #include <array>
@@ -18,20 +67,86 @@
 #include <unordered_map>
 #include <optional>
 
+/**
+ * @namespace hid
+ * @brief HID keyboard mapping and report generation functionality
+ * 
+ * This namespace contains utilities for converting Linux input events
+ * to USB HID keyboard reports, including key mapping tables, state
+ * management, and report formatting according to HID specifications.
+ */
 namespace hid {
 
 // ---------------------------------------------------------------------------
-//  Constants
+//  HID Report Constants and Specifications
 // ---------------------------------------------------------------------------
+
+/**
+ * @brief Size of standard HID keyboard report in bytes
+ * 
+ * Standard HID keyboard reports are exactly 8 bytes according to the
+ * USB HID specification for boot keyboard devices.
+ */
 constexpr std::size_t KEYBOARD_REPORT_SIZE = 8;
+
+/**
+ * @brief Size of HID consumer control report in bytes  
+ * 
+ * Consumer control reports for media keys are 2 bytes.
+ */
 constexpr std::size_t CONSUMER_REPORT_SIZE = 2;
+
+/**
+ * @brief Maximum number of simultaneous non-modifier keys
+ * 
+ * HID keyboard reports can contain up to 6 simultaneous key presses
+ * (bytes 2-7 of the 8-byte report), excluding modifier keys.
+ */
 constexpr std::size_t MAX_SIMULTANEOUS_KEYS = 6;
+
+/**
+ * @brief Base HID usage code for modifier keys
+ * 
+ * Modifier keys (Ctrl, Alt, Shift, etc.) start at usage code 0xE0
+ * and extend to 0xE7, covering 8 possible modifier keys.
+ */
 constexpr std::uint8_t MODIFIER_BASE = 0xE0;
+
+/**
+ * @brief Maximum HID usage code for modifier keys
+ * 
+ * The highest modifier key usage code is 0xE7 (Right GUI/Windows key).
+ */
 constexpr std::uint8_t MODIFIER_MAX = 0xE7;
 
 // ---------------------------------------------------------------------------
-//  Static lookup tables
+//  Key Mapping Tables
 // ---------------------------------------------------------------------------
+
+/**
+ * @brief Mapping from Linux KEY_* codes to USB HID keyboard usage codes
+ * 
+ * This table provides conversion from Linux input event key codes to
+ * USB HID usage codes for the Keyboard/Keypad usage page (0x07).
+ * 
+ * @section Coverage Key Coverage
+ * - Complete US 104-key layout
+ * - Alphabetic keys (A-Z)
+ * - Numeric keys (0-9) and symbols
+ * - Function keys (F1-F12)
+ * - Arrow keys and navigation
+ * - Keypad numbers and operators
+ * - Modifier keys (Ctrl, Alt, Shift, etc.)
+ * - Special keys (Space, Tab, Enter, etc.)
+ * 
+ * @section Standard HID Standard Reference
+ * Usage codes follow the USB HID Usage Tables specification,
+ * Keyboard/Keypad Page (0x07). See:
+ * https://www.usb.org/sites/default/files/documents/hut1_12v2.pdf
+ * 
+ * @note Only includes keys that have direct HID equivalents
+ * @note Modifier keys are handled separately in the modifier bitmap
+ */
 inline const std::unordered_map<int, std::uint8_t> kKeyboardUsage = {
     /* Alphabet */
     {KEY_A, 0x04}, {KEY_B, 0x05}, {KEY_C, 0x06}, {KEY_D, 0x07},

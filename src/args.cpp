@@ -1,5 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
-// SPDX-FileCopyrightText: 2025 Dharun A P
+/**
+ * @file args.cpp
+ * @brief Implementation of command-line argument parsing
+ * @author Dharun A P
+ * @license SPDX-License-Identifier: Apache-2.0
+ * @copyright SPDX-FileCopyrightText: 2025 Dharun A P
+ */
 
 #include "args.hpp"
 #include "version.hpp"
@@ -8,6 +13,18 @@
 
 namespace args {
 
+/**
+ * @brief Construct ArgumentParser from command line arguments
+ * @param argc Number of command line arguments
+ * @param argv Array of command line argument strings
+ * 
+ * Initializes the argument parser by extracting the program name and storing
+ * all arguments for later processing. The program name is cleaned of any
+ * directory path components for cleaner help output.
+ * 
+ * @note The first argument (argv[0]) is treated as the program name
+ * @note Directory separators (/ and \) are stripped from the program name
+ */
 ArgumentParser::ArgumentParser(int argc, char* argv[]) {
     if (argc > 0) {
         program_name_ = argv[0];
@@ -25,6 +42,16 @@ ArgumentParser::ArgumentParser(int argc, char* argv[]) {
     setup_descriptions();
 }
 
+/**
+ * @brief Initialize command-line option descriptions for help output
+ * 
+ * Sets up the descriptions map that maps option flags to their explanations.
+ * This is used to generate formatted help text that explains each available
+ * command-line option and its purpose.
+ * 
+ * @note Descriptions include both short (-X) and long (--xxx) option forms
+ * @note Parameter placeholders (like <ms>, <address>) indicate required values
+ */
 void ArgumentParser::setup_descriptions() {
     descriptions_ = {
         {"-h, --help", "Show this help message and exit"},
@@ -38,6 +65,23 @@ void ArgumentParser::setup_descriptions() {
     };
 }
 
+/**
+ * @brief Parse command-line arguments and return configuration options
+ * @return Optional containing parsed Options, or nullopt if parsing failed
+ * 
+ * Processes all command-line arguments and converts them into a structured
+ * Options object. The function handles:
+ * - Help and version requests (returns nullopt after displaying info)
+ * - Boolean flags (verbose, list-devices)
+ * - Value parameters (target address, timeouts, log level)
+ * - Input validation and error reporting
+ * 
+ * @retval std::nullopt Parsing failed or help/version was requested
+ * @retval Options Parsed configuration ready for application use
+ * 
+ * @note Error messages are printed to stderr before returning nullopt
+ * @note Help and version output go to stdout
+ */
 std::optional<Options> ArgumentParser::parse() {
     Options opts;
     
@@ -134,6 +178,19 @@ std::optional<Options> ArgumentParser::parse() {
     return opts;
 }
 
+/**
+ * @brief Display comprehensive help information to stdout
+ * 
+ * Shows formatted help text including:
+ * - Application name and description
+ * - Usage syntax
+ * - Detailed option descriptions with proper alignment
+ * - Example usage scenarios
+ * - Repository link for additional information
+ * 
+ * The output is formatted for readability with consistent indentation
+ * and alignment of option descriptions.
+ */
 void ArgumentParser::show_help() const {
     std::cout << version::APP_NAME << " - " << version::DESCRIPTION << "\n\n";
     std::cout << "USAGE:\n";
@@ -165,15 +222,56 @@ void ArgumentParser::show_help() const {
     std::cout << version::REPOSITORY << "\n";
 }
 
+/**
+ * @brief Display version and build information to stdout
+ * 
+ * Shows comprehensive version information including:
+ * - Application version details (major.minor.patch-build)
+ * - Build timestamp and environment information
+ * - Compiler and system details
+ * 
+ * The information is retrieved from the version module which provides
+ * both runtime version info and compile-time build details.
+ */
 void ArgumentParser::show_version() const {
     std::cout << version::get_version_info() << "\n\n";
     std::cout << version::get_build_info() << "\n";
 }
 
+/**
+ * @brief Check if a specific flag is present in the argument list
+ * @param flag The flag to search for (e.g., "-h", "--help")
+ * @return true if the flag was found, false otherwise
+ * 
+ * Performs an exact string match against all parsed arguments.
+ * This is used for boolean flags that don't take values.
+ * 
+ * @note Case-sensitive comparison
+ * @note Only matches exact flag strings, not partial matches
+ */
 bool ArgumentParser::has_flag(const std::string& flag) const {
     return std::find(args_.begin(), args_.end(), flag) != args_.end();
 }
 
+/**
+ * @brief Get the value associated with a command-line option
+ * @param flag The option flag to search for (e.g., "--target")
+ * @return Optional containing the value if found, nullopt otherwise
+ * 
+ * Supports two formats for option values:
+ * 1. Separate arguments: "--flag value"
+ * 2. Equals format: "--flag=value"
+ * 
+ * The function first searches for the flag as a separate argument and
+ * returns the following argument as the value. If not found, it searches
+ * for the equals format within any argument.
+ * 
+ * @retval std::nullopt Flag not found or no value provided
+ * @retval std::string The value associated with the flag
+ * 
+ * @note Values are returned as-is without validation or conversion
+ * @note Empty values (e.g., "--flag=") return empty strings, not nullopt
+ */
 std::optional<std::string> ArgumentParser::get_value(const std::string& flag) const {
     auto it = std::find(args_.begin(), args_.end(), flag);
     if (it != args_.end() && std::next(it) != args_.end()) {
@@ -191,6 +289,22 @@ std::optional<std::string> ArgumentParser::get_value(const std::string& flag) co
     return std::nullopt;
 }
 
+/**
+ * @brief Get an integer value associated with a command-line option
+ * @param flag The option flag to search for (e.g., "--scan-timeout")
+ * @return Optional containing the parsed integer if valid, nullopt otherwise
+ * 
+ * Retrieves the string value using get_value() and attempts to parse it
+ * as an integer using std::stoi(). If parsing fails, an error message
+ * is printed to stderr and nullopt is returned.
+ * 
+ * @retval std::nullopt Flag not found, no value provided, or parsing failed
+ * @retval int Successfully parsed integer value
+ * 
+ * @note Parsing errors are reported to stderr with the flag name and invalid value
+ * @note Accepts standard integer formats supported by std::stoi (decimal, hex, etc.)
+ * @note Leading/trailing whitespace is handled by std::stoi
+ */
 std::optional<int> ArgumentParser::get_int_value(const std::string& flag) const {
     auto value = get_value(flag);
     if (!value) return std::nullopt;

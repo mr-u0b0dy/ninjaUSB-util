@@ -1,5 +1,11 @@
-// SPDX-License-Identifier: Apache-2.0
-// SPDX-FileCopyrightText: 2025 Dharun A P
+/**
+ * @file version.hpp.in
+ * @brief Version information template for CMake configuration
+ * @author Build System
+ * @date 2025
+ * @copyright Copyright (c) 2025 Dharun A P
+ * @license SPDX-License-Identifier: Apache-2.0
+ */
 
 #pragma once
 

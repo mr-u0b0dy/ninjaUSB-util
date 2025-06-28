@@ -68,11 +68,13 @@ When possible, test with:
 Before submitting a PR, verify:
 
 ### Build and Compilation
+
 - [ ] Code compiles without warnings
 - [ ] All unit tests pass (`ctest`)
 - [ ] No build errors with tests enabled
 
 ### Functionality
+
 - [ ] Basic functionality works (keyboard detection, BLE connection)
 - [ ] Command-line arguments work correctly
 - [ ] Help and version display correctly
@@ -80,12 +82,14 @@ Before submitting a PR, verify:
 - [ ] Hot-plug events work correctly
 
 ### Quality
+
 - [ ] No memory leaks or segmentation faults
 - [ ] Error handling works as expected
 - [ ] Logging output is appropriate
 - [ ] Performance is acceptable
 
 ### Documentation
+
 - [ ] Documentation updated if needed
 - [ ] Code comments added for complex logic
 - [ ] CHANGELOG updated for user-facing changes

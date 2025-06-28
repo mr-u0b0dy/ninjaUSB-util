@@ -14,6 +14,7 @@ This document provides an overview of the ninjaUSB-util documentation structure.
 
 - **[USER_GUIDE.md](USER_GUIDE.md)** - Complete user guide with installation, usage, and troubleshooting
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Comprehensive development guide
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and design documentation
 - **[TESTING.md](TESTING.md)** - Testing procedures and requirements
 - **[VERSIONING.md](VERSIONING.md)** - Version management system details
 

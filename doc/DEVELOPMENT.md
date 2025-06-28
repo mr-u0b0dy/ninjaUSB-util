@@ -23,7 +23,7 @@ This guide provides comprehensive information for developers contributing to nin
 
 ## Project Structure
 
-```
+```text
 ninjaUSB-util/
 ├── src/                    # Source code
 │   ├── main.cpp           # Application entry point
@@ -161,6 +161,121 @@ For feature requests, please describe:
 **Additional Context:**
 [Any other context or screenshots about the feature request]
 ```
+
+## Documentation
+
+### Code Documentation
+
+The project uses **Doxygen** for API documentation generation. All public interfaces should be well-documented with comprehensive Doxygen comments.
+
+#### Documentation Standards
+
+- **All public classes** must have class-level documentation
+- **All public methods** must have parameter and return value documentation
+- **Use @brief, @param, @return** tags appropriately
+- **Include usage examples** for complex interfaces
+- **Document thread safety** and exception behavior
+- **Explain design decisions** in architectural comments
+
+#### Generating Documentation
+
+```bash
+# Install Doxygen
+sudo apt install doxygen graphviz  # Ubuntu/Debian
+sudo pacman -S doxygen graphviz     # Arch Linux
+
+# Build documentation
+mkdir build && cd build
+cmake .. -DBUILD_DOCS=ON
+make docs
+
+# View documentation
+firefox doc/api/html/index.html
+```
+
+#### Doxygen Configuration
+
+The project uses `.doxygen` (note the dot prefix) as the Doxygen configuration file. This file has been upgraded to the latest Doxygen format and includes comprehensive configuration options and documentation.
+
+The Doxygen configuration is integrated with CMake and automatically configures:
+
+- **PROJECT_NAME**: Set from the CMake `PROJECT_NAME` variable for consistency
+- **PROJECT_NUMBER**: Automatically populated from the `VERSION` file
+
+Note: The PROJECT_NAME in documentation will show as "ninja_util" (the CMake project name) rather than "ninjaUSB-util". This ensures consistency between the build system and documentation.
+
+To update the Doxygen configuration:
+
+```bash
+# Upgrade configuration file to latest format
+doxygen -u .doxygen
+```
+
+#### Doxygen Theme
+
+The project uses the **doxygen-awesome-css** theme for modern, responsive documentation styling. The theme is automatically downloaded and integrated using CMake's FetchContent module.
+
+**Theme Features**:
+
+- Modern, clean design
+- Responsive layout for mobile devices
+- Dark/light mode support
+- Enhanced sidebar navigation
+- Improved typography and spacing
+
+**Theme Integration**:
+
+- Theme files are downloaded during CMake configuration
+- CSS files are automatically referenced in the Doxygen configuration
+- No manual setup required - everything is handled by the build system
+
+#### Documentation Structure
+
+- **API Documentation**: Generated from Doxygen comments in source code
+- **Architecture Guide**: High-level system design in `doc/ARCHITECTURE.md`
+- **User Guide**: End-user documentation in `doc/USER_GUIDE.md`
+- **Development Guide**: This document for contributors
+
+#### Writing Good Documentation
+
+```cpp
+/**
+ * @brief Brief description of the function
+ * @param param1 Description of first parameter
+ * @param param2 Description of second parameter  
+ * @return Description of return value
+ * 
+ * Detailed description of what the function does,
+ * including any side effects, thread safety, and
+ * usage examples.
+ * 
+ * @section Usage Usage Example
+ * @code
+ * auto result = my_function(value1, value2);
+ * if (result) {
+ *     // Handle success
+ * }
+ * @endcode
+ * 
+ * @note Important notes about usage
+ * @warning Warnings about potential issues
+ */
+bool my_function(int param1, const std::string& param2);
+```
+
+### Version Documentation
+
+- **Versioning Scheme**: Follows [Semantic Versioning](https://semver.org/)
+- **Version Components**: MAJOR.MINOR.PATCH
+- **Pre-release Versions**: Indicated by a hyphen and identifier (e.g., 1.0.0-alpha)
+- **Build Metadata**: Optional, indicated by a plus sign (e.g., 1.0.0+20130313144700)
+
+#### Updating Version Information
+
+- Update the `VERSION` file with the new version number
+- Commit the version change with a message like `bump version to 1.0.1`
+- Tag the commit with the new version: `git tag -a v1.0.1 -m "Release version 1.0.1"`
+- Push the tag to the repository: `git push origin v1.0.1`
 
 ## Code of Conduct
 

@@ -26,6 +26,12 @@ set(NINJA_USB_VERSION_STRING "${VERSION_STRING}")
 # Set project with version
 project(ninja_util VERSION ${NINJA_USB_VERSION_MAJOR}.${NINJA_USB_VERSION_MINOR}.${NINJA_USB_VERSION_PATCH})
 
+# Set PROJECT_VERSION for Doxygen to include full version string (with suffixes like "-dev")
+set(PROJECT_VERSION "${NINJA_USB_VERSION_STRING}")
+
+# Set PROJECT_NAME for Doxygen based on the CMake project name
+set(DOXYGEN_PROJECT_NAME "NinjaUSB Util ")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -73,6 +79,48 @@ target_link_libraries(
 
 # Optional: Build tests if requested
 option(BUILD_TESTS "Build unit tests" OFF)
+option(BUILD_DOCS "Build API documentation with Doxygen" OFF)
+
+if(BUILD_DOCS)
+    find_package(Doxygen)
+    if(DOXYGEN_FOUND)
+        # Download doxygen-awesome-css theme using FetchContent
+        include(FetchContent)
+        FetchContent_Declare(doxygen-awesome-css
+            GIT_REPOSITORY https://github.com/jothepro/doxygen-awesome-css.git
+            GIT_TAG v2.3.3  # Use a specific version tag for reproducible builds
+        )
+        FetchContent_MakeAvailable(doxygen-awesome-css)
+        
+        # Set up Doxygen configuration
+        set(DOXYGEN_IN ${CMAKE_CURRENT_SOURCE_DIR}/.doxygen)
+        set(DOXYGEN_OUT ${CMAKE_CURRENT_BINARY_DIR}/.doxygen)
+        
+        # Set theme-related variables for Doxygen configuration
+        set(DOXYGEN_AWESOME_CSS ${doxygen-awesome-css_SOURCE_DIR}/doxygen-awesome.css)
+        set(DOXYGEN_AWESOME_SIDEBAR_ONLY_CSS ${doxygen-awesome-css_SOURCE_DIR}/doxygen-awesome-sidebar-only.css)
+        
+        # Copy .doxygen to build directory  
+        configure_file(${DOXYGEN_IN} ${DOXYGEN_OUT} @ONLY)
+        
+        # Create output directory
+        file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/doc/api)
+        
+        # Add documentation target
+        add_custom_target(docs
+            COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_OUT}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+            COMMENT "Generating API documentation with Doxygen"
+            VERBATIM
+        )
+        
+        message(STATUS "Doxygen found - documentation can be built with 'make docs'")
+        message(STATUS "Using doxygen-awesome-css theme from: ${doxygen-awesome-css_SOURCE_DIR}")
+    else()
+        message(WARNING "Doxygen not found - documentation target not available")
+    endif()
+endif()
+
 if(BUILD_TESTS)
     # Test executables
     add_executable(test_device_manager

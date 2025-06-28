@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: Apache-2.0
-// SPDX-FileCopyrightText: 2025 Dharun A P
-
 /**
  * @file test_args.cpp
  * @brief Unit tests for argument parsing functionality
+ * @author Dharun A P
+ * @license SPDX-License-Identifier: Apache-2.0
+ * @copyright SPDX-FileCopyrightText: 2025 Dharun A P
  */
 
 #include "args.hpp"

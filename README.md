@@ -44,6 +44,7 @@ sudo ./ninja_util
 - **[User Guide](doc/USER_GUIDE.md)** - Installation, usage, and troubleshooting
 - **[Contributing](CONTRIBUTING.md)** - Quick start for contributors
 - **[Development](doc/DEVELOPMENT.md)** - Detailed development guide
+- **[Architecture](doc/ARCHITECTURE.md)** - System architecture and design
 - **[Testing](doc/TESTING.md)** - Testing procedures
 - **[Versioning](doc/VERSIONING.md)** - Version management
 
