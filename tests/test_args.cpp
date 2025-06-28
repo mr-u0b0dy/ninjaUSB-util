@@ -8,12 +8,10 @@
 
 #include <cassert>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <vector>
 
 #include "args.hpp"
-#include "version.hpp"
 
 namespace {
 // Helper to create argc/argv from vector of strings

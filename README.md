@@ -71,13 +71,11 @@ nRF52840 dongle that creates a BLE to USB HID bridge.
 
 ### Project Ecosystem
 
-```text
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│USB Keyboard │ => │ninjaUSB-util│ => │ninjaUSB Dev │ => │Target Device│
-│             │    │(this proj.) │    │(nRF52840)   │    │(via USB HID)│
-│/dev/input/  │    │• BLE Client │    │• BLE Server │    │             │
-│eventX       │    │• Input cap. │    │• USB HID out│    │             │
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+```mermaid
+flowchart LR
+    A[USB Keyboard<br/>/dev/input/eventX] --> B[ninjaUSB-util<br/>this project<br/>• BLE Client<br/>• Input capture]
+    B --> C[ninjaUSB Device<br/>nRF52840<br/>• BLE Server<br/>• USB HID output]
+    C --> D[Target Device<br/>via USB HID]
 ```
 
 ## License

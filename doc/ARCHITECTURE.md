@@ -10,45 +10,31 @@ design, and data flow.
 
 ### High-Level Architecture
 
-```text
-┌───────────────────────────────────────────────────────────────────────────────┐
-│                              ninjaUSB-util                                    │
-├───────────────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                │
-│  │  Argument       │  │   Logger        │  │   Version       │                │
-│  │  Parser         │  │   System        │  │   Management    │                │
-│  │                 │  │                 │  │                 │                │
-│  │ • CLI parsing   │  │ • Log levels    │  │ • Build info    │                │
-│  │ • Validation    │  │ • Timestamps    │  │ • Runtime ver   │                │
-│  │ • Help/Version  │  │ • Output format │  │ • Git info      │                │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘                │
-│                                                                               │
-│  ┌───────────────────────────────────────────────────────────────────────┐    │
-│  │                          Main Event Loop                              │    │
-│  │                                                                       │    │
-│  │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    │    │
-│  │  │  Device         │    │  Input          │    │  BLE            │    │    │
-│  │  │  Manager        │    │  Processing     │    │  Communication  │    │    │
-│  │  │                 │    │                 │    │                 │    │    │
-│  │  │ • udev monitor  │    │ • Event polling │    │ • Device disc.  │    │    │
-│  │  │ • Hot-plug      │    │ • Key mapping   │    │ • Connection    │    │    │
-│  │  │ • Device enum   │    │ • HID reports   │    │ • Report TX     │    │    │
-│  │  └─────────────────┘    └─────────────────┘    └─────────────────┘    │    │
-│  └───────────────────────────────────────────────────────────────────────┘    │
-└───────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌───────────────────────────────────────────────────────────────────────────────┐
-│                             System Interface                                  │
-├───────────────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐  ┌──────────────────┐  ┌─────────────────┐               │
-│  │   udev/evdev    │  │   Qt Bluetooth   │  │  Linux Input    │               │
-│  │                 │  │                  │  │                 │               │
-│  │ • Device events │  │ • BLE scanning   │  │ • /dev/input/*  │               │
-│  │ • Hotplug       │  │ • GATT services  │  │ • Event devices │               │
-│  │ • Device info   │  │ • Characteristics│  │ • Input events  │               │
-│  └─────────────────┘  └──────────────────┘  └─────────────────┘               │
-└───────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph "ninjaUSB-util"
+        subgraph "Core Components"
+            AP["Argument Parser<br/>• CLI parsing<br/>• Validation<br/>• Help/Version"]
+            LS["Logger System<br/>• Log levels<br/>• Timestamps<br/>• Output format"]
+            VM["Version Management<br/>• Build info<br/>• Runtime version<br/>• Git info"]
+        end
+        
+        subgraph "Main Event Loop"
+            DM["Device Manager<br/>• udev monitor<br/>• Hot-plug<br/>• Device enumeration"]
+            IP["Input Processing<br/>• Event polling<br/>• Key mapping<br/>• HID reports"]
+            BLE["BLE Communication<br/>• Device discovery<br/>• Connection<br/>• Report transmission"]
+        end
+    end
+    
+    subgraph "System Interface"
+        UDEV["udev/evdev<br/>• Device events<br/>• Hotplug<br/>• Device info"]
+        QTB["Qt Bluetooth<br/>• BLE scanning<br/>• GATT services<br/>• Characteristics"]
+        LI["Linux Input<br/>• /dev/input/*<br/>• Event devices<br/>• Input events"]
+    end
+    
+    DM --> UDEV
+    IP --> LI
+    BLE --> QTB
 ```
 
 ## Component Architecture
@@ -133,23 +119,25 @@ design, and data flow.
 
 ### Input Processing Pipeline
 
-```text
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ USB Keyboard│ => │Linux Input  │ => │  libevdev   │ => │ninjaUSB-util│
-│             │    │ Subsystem   │    │ Processing  │    │ Application │
-│• Physical   │    │• /dev/input/│    │• Input evts │    │• Event loop │
-│  keys       │    │  eventX     │    │• Key codes  │    │• HID mapping│
-│• USB HID    │    │• Event devs │    │• Event types│    │• Report gen │
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
-                                                                    │
-                                                                    ▼
-┌─────────────┐    ┌──────────────┐    ┌─────────────┐    ┌─────────────┐
-│Target Device│ <= │BLE Transport │ <= │Qt Bluetooth │ <= │HID Reports  │
-│             │    │              │    │             │    │             │
-│• USB HID out│    │• GATT svcs   │    │• BLE scan   │    │• 8-byte rpt │
-│• Final input│    │• Charact.    │    │• Connection │    │• USB HID fmt│
-│• Apps       │    │• Report TX   │    │• Svc disc   │    │• Mod keys   │
-└─────────────┘    └──────────────┘    └─────────────┘    └─────────────┘
+```mermaid
+flowchart TD
+    UK["USB Keyboard<br/>• Physical keys<br/>• USB HID"]
+    LIS["Linux Input Subsystem<br/>• /dev/input/eventX<br/>• Event devices"]
+    LE["libevdev Processing<br/>• Input events<br/>• Key codes<br/>• Event types"]
+    NU["ninjaUSB-util App<br/>• Event loop<br/>• HID mapping<br/>• Report generation"]
+    
+    HR["HID Reports<br/>• 8-byte report<br/>• USB HID format<br/>• Modifier keys"]
+    QTB["Qt Bluetooth<br/>• BLE scanning<br/>• Connection<br/>• Service discovery"]
+    BT["BLE Transport<br/>• GATT services<br/>• Characteristics<br/>• Report transmission"]
+    TD["Target Device<br/>• USB HID output<br/>• Final input<br/>• Applications"]
+    
+    UK --> LIS
+    LIS --> LE
+    LE --> NU
+    NU --> HR
+    HR --> QTB
+    QTB --> BT
+    BT --> TD
 ```
 
 ### Event Processing Flow
