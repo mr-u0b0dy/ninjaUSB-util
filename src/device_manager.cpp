@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2025 Dharun A P
 
 #include "device_manager.hpp"
+#include "logger.hpp"
 #include <algorithm>
-#include <iostream>
 #include <cstring>
 #include <vector>     // Add missing vector header
 #include <functional> // Add missing functional header
@@ -28,11 +28,15 @@ namespace {
 // Add logging utility for consistent error reporting
 namespace {
     void log_error(const std::string& message) {
-        std::cerr << "[ERROR] " << message << std::endl;
+        LOG_ERROR(message);
     }
     
     void log_info(const std::string& message) {
-        std::cout << "[INFO] " << message << std::endl;
+        LOG_INFO(message);
+    }
+    
+    void log_debug(const std::string& message) {
+        LOG_DEBUG(message);
     }
 }
 

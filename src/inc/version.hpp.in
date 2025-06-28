@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Dharun A P
+
+#pragma once
+
+#include <string>
+#include <tuple>
+
+namespace version {
+
+// Version information (auto-generated from VERSION file)
+constexpr int VERSION_MAJOR = @NINJA_USB_VERSION_MAJOR@;
+constexpr int VERSION_MINOR = @NINJA_USB_VERSION_MINOR@;
+constexpr int VERSION_PATCH = @NINJA_USB_VERSION_PATCH@;
+constexpr const char* VERSION_BUILD = "@NINJA_USB_VERSION_BUILD@";
+
+// Legacy macros for compatibility
+#define NINJA_USB_VERSION_MAJOR @NINJA_USB_VERSION_MAJOR@
+#define NINJA_USB_VERSION_MINOR @NINJA_USB_VERSION_MINOR@
+#define NINJA_USB_VERSION_PATCH @NINJA_USB_VERSION_PATCH@
+#define NINJA_USB_VERSION_BUILD "@NINJA_USB_VERSION_BUILD@"
+
+constexpr const char* VERSION_STRING = "@NINJA_USB_VERSION_STRING@";
+constexpr const char* APP_NAME = "ninjaUSB-util";
+constexpr const char* DESCRIPTION = "USB keyboard to BLE bridge utility";
+constexpr const char* COPYRIGHT = "Copyright (c) 2025 Dharun A P";
+constexpr const char* LICENSE = "Licensed under the Apache License 2.0";
+constexpr const char* REPOSITORY = "https://github.com/mr-u0b0dy/ninjaUSB-util";
+constexpr const char* BUILD_DATE = "@BUILD_DATE@";
+constexpr const char* BUILD_TIME = "@BUILD_TIME@";
+constexpr const char* BUILD_COMPILER = "@CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@";
+
+/**
+ * @brief Get formatted version string
+ * @return Complete version information
+ */
+inline std::string get_version_info() {
+    return std::string(APP_NAME) + " " + VERSION_STRING + "\n" +
+           DESCRIPTION + "\n" +
+           COPYRIGHT + "\n" +
+           LICENSE + "\n" +
+           "Repository: " + REPOSITORY;
+}
+
+/**
+ * @brief Get short version string
+ * @return Just the version number
+ */
+inline std::string get_version() noexcept {
+    return VERSION_STRING;
+}
+
+/**
+ * @brief Get application name
+ * @return The application name
+ */
+inline std::string get_app_name() noexcept {
+    return APP_NAME;
+}
+
+/**
+ * @brief Get build information
+ * @return Build details including compiler and date
+ */
+inline std::string get_build_info() {
+    return std::string("Built with ") + BUILD_COMPILER + 
+           " on " + BUILD_DATE + " " + BUILD_TIME;
+}
+
+/**
+ * @brief Check if this is a development version
+ * @return True if this is a development build
+ */
+inline bool is_development_version() noexcept {
+    return std::string(VERSION_BUILD) == "dev";
+}
+
+/**
+ * @brief Check if this is a release version
+ * @return True if this is a release build
+ */
+inline bool is_release_version() noexcept {
+    return std::string(VERSION_BUILD).empty();
+}
+
+/**
+ * @brief Get version components
+ * @return Tuple containing (major, minor, patch, build) version components
+ */
+inline std::tuple<int, int, int, std::string> get_version_components() noexcept {
+    return {VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, std::string(VERSION_BUILD)};
+}
+
+} // namespace version

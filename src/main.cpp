@@ -3,6 +3,9 @@
 
 #include "hid_keycodes.hpp"    // HID keyboard mappings and state management
 #include "device_manager.hpp"  // Device enumeration and hot-plug support
+#include "args.hpp"            // Command-line argument parsing
+#include "logger.hpp"          // Logging utilities
+#include "version.hpp"         // Version information
 #include <QBluetoothDeviceDiscoveryAgent>
 #include <QBluetoothDeviceInfo>
 #include <QBluetoothUuid>
@@ -19,19 +22,20 @@
 #include <iostream>
 #include <libevdev/libevdev.h>
 #include <poll.h>
-#include <string>
 #include <vector>
 
 // ---------------------------------------------------------------------------
-//  Constants & Global state
+//  Constants & Global state  
 // ---------------------------------------------------------------------------
-constexpr int SCAN_TIMEOUT_MS = 10'000; // BLE scan timeout (ms)
-constexpr int POLL_INTERVAL_MS = 1;     // Input polling interval (ms)
-
 std::atomic<bool> g_running{true};
 
+// Global options (will be set from command line)
+namespace {
+    args::Options g_options;
+}
+
 void signal_handler(int signum) {
-    std::cout << "\nCaught signal " << signum << ", exiting...\n";
+    LOG_INFO("Caught signal " + std::to_string(signum) + ", exiting...");
     g_running = false;
 }
 
@@ -55,25 +59,63 @@ auto make_report_writer(QLowEnergyService *service, QLowEnergyCharacteristic ch)
 //  Main
 // ---------------------------------------------------------------------------
 int main(int argc, char *argv[]) {
+    // Parse command line arguments
+    args::ArgumentParser parser(argc, argv);
+    auto options = parser.parse();
+    
+    if (!options) {
+        return 1; // Parse error already reported
+    }
+    
+    g_options = *options;
+    
+    // Handle help and version
+    if (g_options.show_help) {
+        parser.show_help();
+        return 0;
+    }
+    
+    if (g_options.show_version) {
+        parser.show_version();
+        return 0;
+    }
+    
+    // Configure logging
+    logging::Logger::set_level(g_options.log_level);
+    logging::Logger::enable_timestamps(g_options.verbose);
+    
+    if (g_options.verbose) {
+        LOG_INFO("Starting " + std::string(version::APP_NAME) + " " + version::get_version());
+        LOG_DEBUG("Verbose logging enabled");
+        LOG_DEBUG("Scan timeout: " + std::to_string(g_options.scan_timeout) + "ms");
+        LOG_DEBUG("Poll interval: " + std::to_string(g_options.poll_interval) + "ms");
+    }
+
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
     // ------------------ Initialize device management ------------------
     device::KeyboardManager keyboard_manager;
     if (!keyboard_manager.is_valid()) {
-        std::cerr << "Failed to initialize device monitoring\n";
+        LOG_ERROR("Failed to initialize device monitoring");
         return 1;
     }
 
-    std::cout << "Found " << keyboard_manager.device_count() << " keyboard(s)\n";
-    std::cout << "Monitoring keyboards (hot-plug supported)...\n";
+    LOG_INFO("Found " + std::to_string(keyboard_manager.device_count()) + " keyboard(s)");
+    LOG_DEBUG("Monitoring keyboards (hot-plug supported)...");
 
     hid::KeyboardState kb_state;
 
     // ------------------ Qt setup ------------------
     QCoreApplication app(argc, argv);
     QBluetoothDeviceDiscoveryAgent discoveryAgent;
-    discoveryAgent.setLowEnergyDiscoveryTimeout(SCAN_TIMEOUT_MS);
+    discoveryAgent.setLowEnergyDiscoveryTimeout(g_options.scan_timeout);
+
+    // Handle list devices option
+    if (g_options.list_devices) {
+        LOG_INFO("Scanning for BLE devices...");
+        // We'll just start discovery and exit after listing
+    }
 
     QList<QBluetoothDeviceInfo> foundDevices;
     QLowEnergyController *controller = nullptr;
@@ -85,48 +127,78 @@ int main(int argc, char *argv[]) {
     QObject::connect(
         &discoveryAgent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
         [&](const QBluetoothDeviceInfo &info) {
-            std::cout << foundDevices.size() << ": " << info.name().toStdString()
-                      << " [" << info.address().toString().toStdString() << "]\n";
+            LOG_INFO("Found device " + std::to_string(foundDevices.size()) + ": " + 
+                    info.name().toStdString() + " [" + info.address().toString().toStdString() + "]");
             foundDevices.append(info);
         });
 
     QObject::connect(
         &discoveryAgent, &QBluetoothDeviceDiscoveryAgent::finished, [&]() {
-            if (foundDevices.empty()) {
-                std::cerr << "No BLE devices found – exiting.\n";
+            if (g_options.list_devices) {
+                LOG_INFO("BLE device discovery completed. Found " + std::to_string(foundDevices.size()) + " devices");
                 app.quit();
                 return;
             }
-            std::cout << "Discovery complete. Choose device number: ";
-            int index{0};
-            std::cin >> index;
-            if (index < 0 || index >= foundDevices.size()) {
-                std::cerr << "Invalid index\n";
+            
+            if (foundDevices.empty()) {
+                LOG_ERROR("No BLE devices found – exiting.");
                 app.quit();
                 return;
+            }
+            
+            int index = 0;
+            
+            // Check if target device specified
+            if (!g_options.target_device.empty()) {
+                bool found = false;
+                for (int i = 0; i < foundDevices.size(); ++i) {
+                    if (foundDevices[i].address().toString().toStdString() == g_options.target_device ||
+                        foundDevices[i].name().toStdString() == g_options.target_device) {
+                        index = i;
+                        found = true;
+                        LOG_INFO("Found target device: " + g_options.target_device);
+                        break;
+                    }
+                }
+                if (!found) {
+                    LOG_ERROR("Target device not found: " + g_options.target_device);
+                    app.quit();
+                    return;
+                }
+            } else {
+                LOG_INFO("Discovery complete. Choose device number: ");
+                std::cin >> index;
+                if (index < 0 || index >= foundDevices.size()) {
+                    LOG_ERROR("Invalid device index");
+                    app.quit();
+                    return;
+                }
             }
 
             const QBluetoothDeviceInfo &device = foundDevices[index];
             controller = QLowEnergyController::createCentral(device);
+            
+            LOG_INFO("Connecting to device: " + device.name().toStdString());
 
             QObject::connect(controller, &QLowEnergyController::connected, [&]() {
-                std::cout << "Connected. Discovering services…\n";
+                LOG_INFO("Connected. Discovering services...");
                 controller->discoverServices();
             });
             QObject::connect(controller, &QLowEnergyController::disconnected,
                              [&]() {
-                                 std::cerr << "Disconnected.\n";
+                                 LOG_WARN("Disconnected from BLE device");
                                  g_running = false;
                                  app.quit();
                              });
 
             QObject::connect(controller, &QLowEnergyController::serviceDiscovered,
                              [&](const QBluetoothUuid &uuid) {
-                                 std::cout << "Service: " << uuid.toString().toStdString() << "\n";
+                                 LOG_DEBUG("Service discovered: " + uuid.toString().toStdString());
                              });
 
             QObject::connect(
                 controller, &QLowEnergyController::discoveryFinished, [&]() {
+                    LOG_DEBUG("Service discovery finished");
                     // Pick first service and search for writable char
                     for (const QBluetoothUuid &uuid : controller->services()) {
                         service = controller->createServiceObject(uuid);
@@ -144,9 +216,8 @@ int main(int argc, char *argv[]) {
                                          QLowEnergyCharacteristic::WriteNoResponse)) {
                                         targetChar = c;
                                         sendReport = make_report_writer(service, targetChar);
-                                        std::cout << "✔ Writable characteristic: "
-                                                  << c.uuid().toString().toStdString() << "\n";
-                                        std::cout << "Start typing – Ctrl+C to quit.\n";
+                                        LOG_INFO("✔ Found writable characteristic: " + c.uuid().toString().toStdString());
+                                        LOG_INFO("Ready! Start typing – Ctrl+C to quit.");
                                     }
                                 }
                             });
@@ -155,7 +226,7 @@ int main(int argc, char *argv[]) {
                             break;
                     }
                     if (!targetChar.isValid()) {
-                        std::cerr << "No writable characteristic found.\n";
+                        LOG_ERROR("No writable characteristic found");
                         app.quit();
                     }
                 });
@@ -166,13 +237,15 @@ int main(int argc, char *argv[]) {
 
     // ------------------ Input processing loop ------------------
     QTimer pollTimer;
-    pollTimer.setInterval(POLL_INTERVAL_MS);
+    pollTimer.setInterval(g_options.poll_interval);
     QObject::connect(&pollTimer, &QTimer::timeout, [&] {
         if (!g_running || !sendReport)
             return;
 
         // Update device list (handle hot-plug events)
-        keyboard_manager.update_devices();
+        if (keyboard_manager.update_devices() && g_options.verbose) {
+            LOG_DEBUG("Device list updated");
+        }
 
         // Get poll file descriptors
         std::vector<int> fds = keyboard_manager.get_poll_fds();
@@ -199,6 +272,12 @@ int main(int argc, char *argv[]) {
             while (libevdev_next_event(keyboards[i].evdev(), LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0) {
                 if (ev.type != EV_KEY)
                     continue;
+
+                if (g_options.verbose) {
+                    LOG_DEBUG("Key event: code=" + std::to_string(ev.code) + 
+                             " value=" + std::to_string(ev.value) + 
+                             " from " + keyboards[i].name());
+                }
 
                 switch (ev.value) {
                 case 1: // key down
