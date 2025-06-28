@@ -16,8 +16,18 @@
 #include <cstdint>
 #include <set>
 #include <unordered_map>
+#include <optional>
 
 namespace hid {
+
+// ---------------------------------------------------------------------------
+//  Constants
+// ---------------------------------------------------------------------------
+constexpr std::size_t KEYBOARD_REPORT_SIZE = 8;
+constexpr std::size_t CONSUMER_REPORT_SIZE = 2;
+constexpr std::size_t MAX_SIMULTANEOUS_KEYS = 6;
+constexpr std::uint8_t MODIFIER_BASE = 0xE0;
+constexpr std::uint8_t MODIFIER_MAX = 0xE7;
 
 // ---------------------------------------------------------------------------
 //  Static lookup tables
@@ -69,9 +79,7 @@ inline const std::unordered_map<int, std::uint8_t> kKeyboardUsage = {
     {KEY_KP0, 0x62}, {KEY_KPDOT, 0x63}, {KEY_KPEQUAL, 0x67},
 
     /* ISO / Intl */
-    // {KEY_102ND, 0x64}, {KEY_RO, 0x87}, {KEY_KANA, 0x88},
-    // {KEY_JP_YEN, 0x89}, {KEY_HENKAN, 0x8A}, {KEY_MUHENKAN, 0x8B},
-    // {KEY_KATAKANAHIRAGANA, 0x90}, {KEY_JP_BACKSLASH, 0x92},
+    {KEY_102ND, 0x64}, // Additional key for non-US keyboards
 
     /* Modifiers */
     {KEY_LEFTCTRL, 0xE0},  {KEY_LEFTSHIFT, 0xE1}, {KEY_LEFTALT, 0xE2},
@@ -87,64 +95,188 @@ inline const std::unordered_map<int, std::uint16_t> kConsumerUsage = {
     {KEY_PLAYPAUSE, 0x00CD},  {KEY_NEXTSONG, 0x00B5},   {KEY_PREVIOUSSONG, 0x00B6},
     {KEY_STOPCD, 0x00B7},     {KEY_EJECTCD, 0x00B8},
     {KEY_BRIGHTNESSUP, 0x006F}, {KEY_BRIGHTNESSDOWN, 0x0070},
+    {KEY_HOMEPAGE, 0x0223}, {KEY_SEARCH, 0x0221}, {KEY_BACK, 0x0224},
+    {KEY_FORWARD, 0x0225}, {KEY_REFRESH, 0x0227}, {KEY_BOOKMARKS, 0x022A},
 };
 
 // ---------------------------------------------------------------------------
 //  Helper utilities
 // ---------------------------------------------------------------------------
-inline constexpr bool is_modifier(std::uint8_t hid_code) {
-    return hid_code >= 0xE0 && hid_code <= 0xE7;
+[[nodiscard]] constexpr bool is_modifier(std::uint8_t hid_code) noexcept {
+    return hid_code >= MODIFIER_BASE && hid_code <= MODIFIER_MAX;
 }
 
-struct KeyboardState {
-    std::uint8_t modifiers{0};
-    std::set<std::uint8_t> pressed;   // non‑modifier HID codes
-    std::array<std::uint8_t, 8> report{};  // 8‑byte keyboard report
+[[nodiscard]] constexpr std::uint8_t modifier_bit(std::uint8_t hid_code) noexcept {
+    return static_cast<std::uint8_t>(1u << (hid_code - MODIFIER_BASE));
+}
 
-    void update() {
-        report.fill(0);
-        report[0] = modifiers;
+/**
+ * @brief Look up HID usage code for a Linux key code
+ * @param linux_code Linux input event code
+ * @return HID usage code if found, nullopt otherwise
+ */
+[[nodiscard]] inline std::optional<std::uint8_t> get_keyboard_usage(int linux_code) noexcept {
+    if (const auto it = kKeyboardUsage.find(linux_code); it != kKeyboardUsage.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
+/**
+ * @brief Look up consumer control usage code for a Linux key code
+ * @param linux_code Linux input event code
+ * @return Consumer usage code if found, nullopt otherwise
+ */
+[[nodiscard]] inline std::optional<std::uint16_t> get_consumer_usage(int linux_code) noexcept {
+    if (const auto it = kConsumerUsage.find(linux_code); it != kConsumerUsage.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
+/**
+ * @brief Represents the state of a HID keyboard
+ */
+class KeyboardState {
+private:
+    std::uint8_t modifiers_{0};
+    std::set<std::uint8_t> pressed_keys_;   // Non‑modifier HID codes
+    mutable std::array<std::uint8_t, KEYBOARD_REPORT_SIZE> report_{};
+    mutable bool report_dirty_{true};
+
+    void update_report() const noexcept {
+        if (!report_dirty_) return;
+        
+        report_.fill(0);
+        report_[0] = modifiers_;
+        
         std::size_t idx = 2;
-        for (auto key : pressed) {
-            if (idx < report.size()) report[idx++] = key;
+        for (const auto key : pressed_keys_) {
+            if (idx < report_.size()) {
+                report_[idx++] = key;
+            } else {
+                // Handle key rollover - could implement NKRO or 6KRO behavior
+                break;
+            }
         }
+        report_dirty_ = false;
+    }
+
+public:
+    /**
+     * @brief Get the current 8-byte HID keyboard report
+     * @return Reference to the report array
+     */
+    [[nodiscard]] const std::array<std::uint8_t, KEYBOARD_REPORT_SIZE>& get_report() const noexcept {
+        update_report();
+        return report_;
+    }
+
+    /**
+     * @brief Get current modifier state
+     * @return Modifier byte
+     */
+    [[nodiscard]] std::uint8_t get_modifiers() const noexcept {
+        return modifiers_;
+    }
+
+    /**
+     * @brief Get number of currently pressed non-modifier keys
+     * @return Number of pressed keys
+     */
+    [[nodiscard]] std::size_t get_pressed_key_count() const noexcept {
+        return pressed_keys_.size();
+    }
+
+    /**
+     * @brief Check if keyboard state has changed since last report
+     * @return True if report needs to be sent
+     */
+    [[nodiscard]] bool is_dirty() const noexcept {
+        return report_dirty_;
+    }
+
+    /**
+     * @brief Apply a key press/release event
+     * @param hid_code HID usage code
+     * @param pressed True for press, false for release
+     */
+    void set_key_state(std::uint8_t hid_code, bool pressed) noexcept {
+        if (is_modifier(hid_code)) {
+            const auto bit = modifier_bit(hid_code);
+            if (pressed) {
+                modifiers_ |= bit;
+            } else {
+                modifiers_ &= ~bit;
+            }
+        } else {
+            if (pressed) {
+                pressed_keys_.insert(hid_code);
+            } else {
+                pressed_keys_.erase(hid_code);
+            }
+        }
+        report_dirty_ = true;
+    }
+
+    /**
+     * @brief Clear all pressed keys and modifiers
+     */
+    void clear() noexcept {
+        modifiers_ = 0;
+        pressed_keys_.clear();
+        report_dirty_ = true;
     }
 };
 
 /**
- * Apply a Linux EV_KEY event to the keyboard state.
- * @return true  if handled as keyboard key
- *         false if not a keyboard key (caller can test consumer table instead)
+ * @brief Apply a Linux EV_KEY event to the keyboard state
+ * @param state Keyboard state to modify
+ * @param linux_code Linux input event code
+ * @param value Event value (0=release, 1=press, 2=repeat)
+ * @return true if handled as keyboard key, false if not a keyboard key
  */
-inline bool apply_key_event(KeyboardState &state, int linux_code, int value) {
-    auto it = kKeyboardUsage.find(linux_code);
-    if (it == kKeyboardUsage.end()) return false;  // Not a keyboard usage
-
-    std::uint8_t hid_code = it->second;
-    if (is_modifier(hid_code)) {
-        std::uint8_t bit = 1u << (hid_code - 0xE0);
-        if (value == 1)
-            state.modifiers |= bit;
-        else if (value == 0)
-            state.modifiers &= ~bit;
-    } else {
-        if (value == 1)
-            state.pressed.insert(hid_code);
-        else if (value == 0)
-            state.pressed.erase(hid_code);
+[[nodiscard]] inline bool apply_key_event(KeyboardState& state, int linux_code, int value) noexcept {
+    const auto hid_code = get_keyboard_usage(linux_code);
+    if (!hid_code) {
+        return false;  // Not a keyboard usage
     }
-    state.update();
+
+    switch (value) {
+        case 0:  // Key release
+            state.set_key_state(*hid_code, false);
+            break;
+        case 1:  // Key press
+        case 2:  // Key repeat
+            state.set_key_state(*hid_code, true);
+            break;
+        default:
+            return false;  // Unknown value
+    }
+
     return true;
 }
 
-/** Build a 2‑byte consumer‑control report (little‑endian). */
-inline std::array<std::uint8_t, 2> consumer_report(int linux_code, int value) {
-    std::uint16_t usage = 0;  // default: empty / key‑release
+/**
+ * @brief Build a 2‑byte consumer‑control report (little‑endian)
+ * @param linux_code Linux input event code
+ * @param value Event value (0=release, 1=press)
+ * @return 2-byte consumer report
+ */
+[[nodiscard]] inline std::array<std::uint8_t, CONSUMER_REPORT_SIZE> 
+make_consumer_report(int linux_code, int value) noexcept {
+    std::uint16_t usage = 0;  // Default: empty / key‑release
+    
     if (value == 1) {
-        auto it = kConsumerUsage.find(linux_code);
-        if (it != kConsumerUsage.end()) usage = it->second;
+        if (const auto consumer_usage = get_consumer_usage(linux_code)) {
+            usage = *consumer_usage;
+        }
     }
-    return {static_cast<std::uint8_t>(usage & 0xFF), static_cast<std::uint8_t>((usage >> 8) & 0xFF)};
+    
+    return {
+        static_cast<std::uint8_t>(usage & 0xFF), 
+        static_cast<std::uint8_t>((usage >> 8) & 0xFF)
+    };
 }
 
 } // namespace hid
