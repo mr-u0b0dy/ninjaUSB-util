@@ -2,7 +2,9 @@
 
 ## Overview
 
-ninjaUSB-util is a Linux utility that bridges USB keyboard input to Bluetooth Low Energy (BLE) devices. This document describes the system architecture, component design, and data flow.
+ninjaUSB-util is a Linux utility that bridges USB keyboard input to Bluetooth Low
+Energy (BLE) devices. This document describes the system architecture, component
+design, and data flow.
 
 ## System Architecture
 
@@ -132,23 +134,22 @@ ninjaUSB-util is a Linux utility that bridges USB keyboard input to Bluetooth Lo
 ### Input Processing Pipeline
 
 ```text
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  USB Keyboard   │ => │  Linux Input    │ => │   libevdev      │ => │  ninjaUSB-util  │
-│                 │    │   Subsystem     │    │   Processing    │    │   Application   │
-│                 │    │                 │    │                 │    │                 │
-│ • Physical keys │    │ • /dev/input/   │    │ • Input events  │    │ • Event loop    │
-│ • USB HID       │    │   eventX        │    │ • Key codes     │    │ • HID mapping   │
-│ • Raw input     │    │ • Event devices │    │ • Event types   │    │ • Report gen    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
-                                                                              │
-                                                                              ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  Target Device  │ <= │  BLE Transport   │ <= │  Qt Bluetooth   │ <= │  HID Reports    │
-│                 │    │                  │    │                 │    │                 │
-│ • USB HID out   │    │ • GATT services  │    │ • BLE scanning  │    │ • 8-byte report │
-│ • Final input   │    │ • Characteristics│    │ • Connection    │    │ • USB HID fmt   │
-│ • Applications  │    │ • Report TX      │    │ • Service disc  │    │ • Modifier keys │
-└─────────────────┘    └──────────────────┘    └─────────────────┘    └─────────────────┘
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ USB Keyboard│ => │Linux Input  │ => │  libevdev   │ => │ninjaUSB-util│
+│             │    │ Subsystem   │    │ Processing  │    │ Application │
+│• Physical   │    │• /dev/input/│    │• Input evts │    │• Event loop │
+│  keys       │    │  eventX     │    │• Key codes  │    │• HID mapping│
+│• USB HID    │    │• Event devs │    │• Event types│    │• Report gen │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+                                                                    │
+                                                                    ▼
+┌─────────────┐    ┌──────────────┐    ┌─────────────┐    ┌─────────────┐
+│Target Device│ <= │BLE Transport │ <= │Qt Bluetooth │ <= │HID Reports  │
+│             │    │              │    │             │    │             │
+│• USB HID out│    │• GATT svcs   │    │• BLE scan   │    │• 8-byte rpt │
+│• Final input│    │• Charact.    │    │• Connection │    │• USB HID fmt│
+│• Apps       │    │• Report TX   │    │• Svc disc   │    │• Mod keys   │
+└─────────────┘    └──────────────┘    └─────────────┘    └─────────────┘
 ```
 
 ### Event Processing Flow
@@ -322,4 +323,5 @@ All resource management uses RAII:
 - **Runtime access**: Generated version header
 - **Git integration**: Commit hash and build time
 
-This architecture provides a solid foundation for a reliable, maintainable, and extensible USB-to-BLE keyboard bridge utility.
+This architecture provides a solid foundation for a reliable, maintainable, and extensible
+USB-to-BLE keyboard bridge utility.

@@ -2,17 +2,19 @@
 
 ## Overview
 
-ninjaUSB-util uses a centralized versioning system based on a single `VERSION` file that propagates version information throughout the entire codebase.
+ninjaUSB-util uses a centralized versioning system based on a single `VERSION` file
+that propagates version information throughout the entire codebase.
 
 ## VERSION File Format
 
 The `VERSION` file contains a single line with semantic versioning format:
 
-```
+```text
 MAJOR.MINOR.PATCH[-BUILD]
 ```
 
 Examples:
+
 - `1.0.0` - Release version
 - `1.0.0-dev` - Development version  
 - `1.2.3-beta` - Beta version
@@ -30,12 +32,14 @@ Examples:
 The generated `version.hpp` provides:
 
 ### Macros
+
 - `NINJA_USB_VERSION_MAJOR` - Major version number
 - `NINJA_USB_VERSION_MINOR` - Minor version number  
 - `NINJA_USB_VERSION_PATCH` - Patch version number
 - `NINJA_USB_VERSION_BUILD` - Build suffix (e.g., "dev", "beta")
 
 ### Constants
+
 - `VERSION_STRING` - Complete version string
 - `APP_NAME` - Application name
 - `DESCRIPTION` - Application description
@@ -47,6 +51,7 @@ The generated `version.hpp` provides:
 - `BUILD_COMPILER` - Compiler information
 
 ### Functions
+
 - `get_version_info()` - Complete formatted version information
 - `get_version()` - Just the version number
 - `get_build_info()` - Build details
@@ -78,6 +83,7 @@ The version change will automatically propagate to all code that includes `versi
 ## Integration Points
 
 The version system is used in:
+
 - Command-line argument parsing (`--version` flag)
 - Application startup logging
 - Help text display
@@ -90,4 +96,5 @@ The version system is used in:
 - Use `-beta`, `-rc1` etc. for pre-releases
 - Use clean version for releases: `1.0.0`
 
-This centralized approach ensures version consistency across the entire codebase and makes releases simple and error-free.
+This centralized approach ensures version consistency across the entire codebase
+and makes releases simple and error-free.

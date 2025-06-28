@@ -38,7 +38,8 @@ ctest
 
 For detailed information, see:
 
-- **[Development Guide](doc/DEVELOPMENT.md)** - Comprehensive development setup and guidelines
+- **[Development Guide](doc/DEVELOPMENT.md)** - Comprehensive development setup
+  and guidelines
 - **[Testing Guide](doc/TESTING.md)** - Detailed testing procedures and checklist
 - **[Versioning Guide](doc/VERSIONING.md)** - Version management system
 

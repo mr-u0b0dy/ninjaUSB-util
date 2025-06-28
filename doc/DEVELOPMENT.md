@@ -166,7 +166,8 @@ For feature requests, please describe:
 
 ### Code Documentation
 
-The project uses **Doxygen** for API documentation generation. All public interfaces should be well-documented with comprehensive Doxygen comments.
+The project uses **Doxygen** for API documentation generation. All public
+interfaces should be well-documented with comprehensive Doxygen comments.
 
 #### Documentation Standards
 
@@ -195,14 +196,18 @@ firefox doc/api/html/index.html
 
 #### Doxygen Configuration
 
-The project uses `.doxygen` (note the dot prefix) as the Doxygen configuration file. This file has been upgraded to the latest Doxygen format and includes comprehensive configuration options and documentation.
+The project uses `.doxygen` (note the dot prefix) as the Doxygen configuration
+file. This file has been upgraded to the latest Doxygen format and includes
+comprehensive configuration options and documentation.
 
 The Doxygen configuration is integrated with CMake and automatically configures:
 
 - **PROJECT_NAME**: Set from the CMake `PROJECT_NAME` variable for consistency
 - **PROJECT_NUMBER**: Automatically populated from the `VERSION` file
 
-Note: The PROJECT_NAME in documentation will show as "ninja_util" (the CMake project name) rather than "ninjaUSB-util". This ensures consistency between the build system and documentation.
+Note: The PROJECT_NAME in documentation will show as "ninja_util" (the CMake
+project name) rather than "ninjaUSB-util". This ensures consistency between the
+build system and documentation.
 
 To update the Doxygen configuration:
 
@@ -213,7 +218,9 @@ doxygen -u .doxygen
 
 #### Doxygen Theme
 
-The project uses the **doxygen-awesome-css** theme for modern, responsive documentation styling. The theme is automatically downloaded and integrated using CMake's FetchContent module.
+The project uses the **doxygen-awesome-css** theme for modern, responsive
+documentation styling. The theme is automatically downloaded and integrated
+using CMake's FetchContent module.
 
 **Theme Features**:
 
@@ -294,4 +301,5 @@ If you have questions about contributing, feel free to:
 
 ## Acknowledgments
 
-Thank you for contributing to ninjaUSB-util! Every contribution, no matter how small, helps make this project better for everyone.
+Thank you for contributing to ninjaUSB-util! Every contribution, no matter how
+small, helps make this project better for everyone.

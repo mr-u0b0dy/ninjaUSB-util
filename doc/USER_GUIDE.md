@@ -4,11 +4,14 @@ Complete guide for using ninjaUSB-util.
 
 ## What is ninjaUSB-util?
 
-A Linux utility that bridges USB keyboard input to Bluetooth Low Energy (BLE) devices, enabling you to use your physical keyboard to control BLE devices that accept HID keyboard input.
+A Linux utility that bridges USB keyboard input to Bluetooth Low Energy (BLE)
+devices, enabling you to use your physical keyboard to control BLE devices that
+accept HID keyboard input.
 
 ## How It Works
 
-1. **Keyboard Monitoring**: Uses `udev` and `libevdev` to monitor Linux input devices (`/dev/input/eventX`)
+1. **Keyboard Monitoring**: Uses `udev` and `libevdev` to monitor Linux input
+   devices (`/dev/input/eventX`)
 2. **Input Processing**: Converts Linux keyboard events to USB HID usage codes
 3. **BLE Communication**: Uses Qt6 Bluetooth to discover and connect to BLE devices
 4. **Report Transmission**: Sends HID keyboard reports to writable BLE characteristics
@@ -93,11 +96,13 @@ ninja
    sudo ./ninja_util
    ```
 
-2. **Device Discovery**: The program will scan for BLE devices for 10 seconds and display a list
+2. **Device Discovery**: The program will scan for BLE devices for 10 seconds and
+   display a list
 
 3. **Select Target Device**: Choose the device number you want to connect to
 
-4. **Start Typing**: Once connected, keyboard input will be forwarded to the selected BLE device
+4. **Start Typing**: Once connected, keyboard input will be forwarded to the
+   selected BLE device
 
 5. **Exit**: Press Ctrl+C to quit. TODO: will change to quit hot key.
 
@@ -112,7 +117,8 @@ The utility supports a comprehensive set of keyboard keys including:
 - **Special keys** (Enter, Backspace, Tab, Space, Arrow keys)
 - **Punctuation and symbols**
 
-See `src/inc/hid_keycodes.hpp` for the complete mapping of Linux key codes to USB HID usage IDs.
+See `src/inc/hid_keycodes.hpp` for the complete mapping of Linux key codes to USB
+HID usage IDs.
 
 ## Architecture
 
