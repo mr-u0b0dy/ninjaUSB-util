@@ -30,24 +30,58 @@ jobs:
       image: ubuntu:${{ matrix.ubuntu-version }}
 
     steps:
-    - name: Install system dependencies
+    - name: Install base dependencies
       run: |
         apt-get update
-        apt-get install -y \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
           build-essential \
           cmake \
           git \
           pkg-config \
+          curl \
+          ca-certificates \
+          software-properties-common \
+          wget \
+          gnupg2 \
+          lsb-release
+
+    - name: Install Qt6 dependencies by Ubuntu version
+      run: |
+        UBUNTU_VERSION="${{ matrix.ubuntu-version }}"
+        echo "Installing Qt6 for Ubuntu ${UBUNTU_VERSION}"
+        
+        if [ "${UBUNTU_VERSION}" = "20.04" ]; then
+          # Ubuntu 20.04: Use Qt6 from universe and add PPA if needed
+          apt-get install -y software-properties-common
+          add-apt-repository -y universe
+          apt-get update
+          
+          # Try to install Qt6 from universe first
+          if ! apt-get install -y qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6; then
+            echo "Qt6 not available in universe, trying PPA..."
+            add-apt-repository -y ppa:okirby/qt6-backports || true
+            apt-get update
+            apt-get install -y qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6 || {
+              echo "Qt6 installation failed, falling back to Qt5"
+              apt-get install -y qtbase5-dev qtconnectivity5-dev libqt5core5a libqt5bluetooth5
+              echo "QT_VERSION=5" >> $GITHUB_ENV
+            }
+          fi
+        elif [ "${UBUNTU_VERSION}" = "22.04" ]; then
+          # Ubuntu 22.04: Qt6 should be available
+          apt-get install -y qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6
+        else
+          # Ubuntu 24.04: Latest Qt6
+          apt-get install -y qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6
+        fi
+
+    - name: Install system libraries
+      run: |
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
           libudev-dev \
           libevdev-dev \
-          qt6-base-dev \
-          qt6-bluetooth-dev \
-          libqt6core6 \
-          libqt6bluetooth6 \
           doxygen \
-          graphviz \
-          curl \
-          ca-certificates
+          graphviz
 
     - name: Checkout code
       uses: actions/checkout@v4
@@ -62,15 +96,24 @@ jobs:
     - name: Configure CMake
       run: |
         cd build
+        echo "=== CMake Configuration ==="
+        echo "Build type: ${{ matrix.build-type }}"
+        echo "Ubuntu version: ${{ matrix.ubuntu-version }}"
+        echo "Available Qt packages:"
+        dpkg -l | grep -i qt || echo "No Qt packages found"
+        
         cmake .. \
           -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
           -DBUILD_TESTS=ON \
-          -DBUILD_DOCS=ON
+          -DBUILD_DOCS=ON \
+          -DCMAKE_VERBOSE_MAKEFILE=ON
 
     - name: Build
       run: |
         cd build
-        make -j$(nproc)
+        echo "=== Starting Build ==="
+        echo "Available cores: $(nproc)"
+        make -j$(nproc) VERBOSE=1
 
     - name: Run tests
       run: |
@@ -111,7 +154,7 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
           build-essential \
           cmake \
           git \
@@ -123,7 +166,8 @@ jobs:
           clang-tidy \
           cppcheck \
           curl \
-          ca-certificates
+          ca-certificates \
+          software-properties-common
 
     - name: Checkout code
       uses: actions/checkout@v4
