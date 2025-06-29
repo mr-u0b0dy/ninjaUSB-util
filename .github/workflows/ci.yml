@@ -439,7 +439,7 @@ jobs:
         echo "🔍 Checking Mermaid diagrams..."
         if command -v mmdc >/dev/null 2>&1; then
           # Find files containing mermaid diagrams
-          MERMAID_FILES=$(grep -r "```mermaid" . --include="*.md" --exclude-dir=build --exclude-dir=node_modules | cut -d: -f1 | sort -u || true)
+          MERMAID_FILES=$(grep -r '\`\`\`mermaid' . --include="*.md" --exclude-dir=build --exclude-dir=node_modules | cut -d: -f1 | sort -u || true)
           
           if [ -n "$MERMAID_FILES" ]; then
             echo "Found Mermaid diagrams in:"
@@ -449,7 +449,7 @@ jobs:
             for file in $MERMAID_FILES; do
               echo "Validating Mermaid diagrams in: $file"
               # This is a basic check - extract mermaid blocks and validate syntax
-              awk '/```mermaid/,/```/' "$file" | grep -v '```' > /tmp/mermaid_temp.mmd 2>/dev/null || true
+              awk '/\`\`\`mermaid/,/\`\`\`/' "$file" | grep -v '\`\`\`' > /tmp/mermaid_temp.mmd 2>/dev/null || true
               if [ -s /tmp/mermaid_temp.mmd ]; then
                 mmdc -i /tmp/mermaid_temp.mmd -o /tmp/mermaid_test.png 2>/dev/null && \
                   echo "✅ Mermaid diagram valid in $file" || \
@@ -613,7 +613,7 @@ jobs:
   performance-test:
     name: Performance Test
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.message, '[perf]') || github.event_name == 'schedule'
+    if: contains(github.event.head_commit.message, '[perf]')
     container:
       image: ubuntu:24.04
 
