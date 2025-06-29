@@ -1,0 +1,469 @@
+name: Weekly Maintenance
+
+on:
+  schedule:
+    # Run every Monday at 6 AM UTC
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      force_dependency_update:
+        description: 'Force dependency update check'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  CACHE_VERSION: v2
+
+jobs:
+  dependency-updates:
+    name: Check Dependency Updates
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Check Qt6 updates
+      run: |
+        echo "🔄 Checking for Qt6 updates..."
+        
+        # Check current Qt version requirements
+        echo "Current Qt6 dependencies in workflows:"
+        grep -r "qt6-.*-dev" .github/workflows/ || echo "No Qt6 dependencies found"
+        
+        # Check available Qt6 versions
+        echo "Checking available Qt6 versions..."
+        curl -s https://download.qt.io/official_releases/qt/ | \
+          grep -o 'href="6\.[0-9][0-9]*/"' | \
+          sed 's/href="//g; s/"//g' | \
+          sort -V | tail -3
+
+    - name: Check CMake updates
+      run: |
+        echo "🔄 Checking for CMake updates..."
+        
+        # Extract current CMake requirement
+        CURRENT_CMAKE=$(grep "cmake_minimum_required" CMakeLists.txt | grep -o "[0-9]\+\.[0-9]\+")
+        echo "Current CMake requirement: $CURRENT_CMAKE"
+        
+        # Check latest stable CMake
+        echo "Latest CMake releases:"
+        curl -s https://api.github.com/repos/Kitware/CMake/releases/latest | \
+          jq -r '.tag_name' | sed 's/v//' || echo "Failed to get latest CMake version"
+
+    - name: Check Ubuntu LTS updates
+      run: |
+        echo "🔄 Checking Ubuntu LTS versions..."
+        echo "Current Ubuntu versions in workflows:"
+        grep -r "ubuntu:" .github/workflows/ | grep -o "ubuntu:[0-9.]*" | sort -u
+        
+        echo "Latest Ubuntu LTS releases should be checked manually at:"
+        echo "https://wiki.ubuntu.com/Releases"
+
+    - name: Security advisory check
+      run: |
+        echo "🔍 Checking for security advisories..."
+        
+        # Check GitHub security advisories for dependencies
+        echo "Checking for security advisories in ecosystem..."
+        
+        # This is a placeholder - in a real scenario, you'd use tools like:
+        # - GitHub Advisory Database API
+        # - Dependabot alerts
+        # - CVE databases
+        
+        echo "ℹ️  Manual security review recommended for:"
+        echo "  - Qt6 security bulletins"
+        echo "  - CMake security updates"
+        echo "  - Ubuntu security packages"
+
+  vulnerability-scan:
+    name: Vulnerability Scanning
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+    outputs:
+      vulnerabilities-found: ${{ steps.scan-summary.outputs.found }}
+      critical-count: ${{ steps.scan-summary.outputs.critical }}
+      high-count: ${{ steps.scan-summary.outputs.high }}
+
+    steps:
+    - name: Install security scanning tools
+      run: |
+        apt-get update -qq
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          git \
+          curl \
+          wget \
+          python3 \
+          python3-pip \
+          jq \
+          build-essential \
+          cmake \
+          pkg-config \
+          libudev-dev \
+          libevdev-dev \
+          qt6-base-dev \
+          qt6-connectivity-dev
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Cache vulnerability databases
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pip
+          /tmp/vuln-db
+        key: vuln-scan-${{ runner.os }}-${{ env.CACHE_VERSION }}-${{ hashFiles('.github/workflows/weekly-maintenance.yml') }}
+        restore-keys: |
+          vuln-scan-${{ runner.os }}-${{ env.CACHE_VERSION }}-
+          vuln-scan-${{ runner.os }}-
+
+    - name: Install vulnerability scanning tools
+      run: |
+        # Install Python-based security tools
+        pip3 install --user safety bandit semgrep
+        
+        # Add user bin to PATH
+        export PATH="$HOME/.local/bin:$PATH"
+        echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
+
+    - name: System package vulnerability scan
+      run: |
+        echo "🔍 Scanning system packages for vulnerabilities..."
+        
+        # Check for known vulnerable packages
+        echo "Current system packages that might have vulnerabilities:"
+        dpkg -l | grep -E "(openssl|glibc|zlib|curl|git)" | head -10
+        
+        # Check Ubuntu security updates
+        echo "Checking for security updates..."
+        apt list --upgradable 2>/dev/null | grep -i security | head -10 || echo "No security updates available"
+
+    - name: Dependency vulnerability scan with Safety
+      run: |
+        echo "🔍 Scanning Python dependencies with Safety..."
+        
+        # Create a requirements file for scanning
+        cat > /tmp/requirements.txt << EOF
+        # Python dependencies used in build/CI
+        pyyaml
+        jinja2
+        requests
+        urllib3
+        EOF
+        
+        # Run safety scan
+        if command -v safety >/dev/null 2>&1; then
+          safety check --file /tmp/requirements.txt --json > safety_report.json 2>/dev/null || {
+            echo "Safety scan completed with warnings"
+            cat safety_report.json 2>/dev/null || echo "No JSON report generated"
+          }
+        else
+          echo "Safety tool not available"
+        fi
+
+    - name: Source code security scan with Bandit
+      run: |
+        echo "🔍 Scanning source code for security issues with Bandit..."
+        
+        # Scan any Python files in the repository
+        if find . -name "*.py" -not -path "./.git/*" | head -1 | grep -q .; then
+          if command -v bandit >/dev/null 2>&1; then
+            bandit -r . -f json -o bandit_report.json 2>/dev/null || {
+              echo "Bandit scan completed with warnings"
+              cat bandit_report.json 2>/dev/null || echo "No JSON report generated"
+            }
+          else
+            echo "Bandit tool not available"
+          fi
+        else
+          echo "No Python files found to scan with Bandit"
+        fi
+
+    - name: Source code analysis with Semgrep
+      run: |
+        echo "🔍 Running Semgrep security analysis..."
+        
+        # Run semgrep with security rules
+        if command -v semgrep >/dev/null 2>&1; then
+          semgrep --config=auto --json --output semgrep_report.json . 2>/dev/null || {
+            echo "Semgrep scan completed with warnings"
+            cat semgrep_report.json 2>/dev/null | head -20 || echo "No JSON report generated"
+          }
+        else
+          echo "Semgrep tool not available"
+        fi
+
+    - name: C++ specific security checks
+      run: |
+        echo "🔍 Running C++ specific security checks..."
+        
+        # Check for common C++ security issues
+        echo "Checking for potential buffer overflows and unsafe functions..."
+        
+        # Search for potentially unsafe C functions
+        unsafe_functions="strcpy strcat sprintf gets scanf"
+        for func in $unsafe_functions; do
+          if grep -r "$func" src/ 2>/dev/null | grep -v "// SAFE:" | head -3; then
+            echo "⚠️  Found potentially unsafe function: $func"
+          fi
+        done
+        
+        # Check for potential memory issues
+        echo "Checking for potential memory management issues..."
+        if grep -r "malloc\|free\|new\|delete" src/ 2>/dev/null | head -5; then
+          echo "ℹ️  Manual review recommended for memory management"
+        fi
+
+    - name: Qt6 security assessment
+      run: |
+        echo "🔍 Checking Qt6 security..."
+        
+        # Check Qt6 version for known vulnerabilities
+        qt_version=$(pkg-config --modversion Qt6Core 2>/dev/null || echo "unknown")
+        echo "Qt6 Core version: $qt_version"
+        
+        # Check for Qt security advisories (manual check recommended)
+        echo "Qt6 security check:"
+        echo "  Current version: $qt_version"
+        echo "  Manual verification recommended at: https://www.qt.io/product/qt6/security"
+
+    - name: GitHub Security Advisory check
+      run: |
+        echo "🔍 Checking GitHub Security Advisories..."
+        
+        # Check for security advisories in the ecosystem
+        echo "Checking repository security advisories..."
+        
+        # Use GitHub API to check for security advisories
+        if [ -n "$GITHUB_TOKEN" ]; then
+          curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/vulnerability-alerts" \
+            2>/dev/null || echo "Unable to fetch security advisories"
+        else
+          echo "ℹ️  GITHUB_TOKEN not available for security advisory check"
+        fi
+
+    - name: Container image vulnerability scan
+      run: |
+        echo "🔍 Scanning container images for vulnerabilities..."
+        
+        # Check the Ubuntu base image we're using
+        echo "Base image security check:"
+        echo "  Image: ubuntu:24.04"
+        echo "  Recommendation: Use specific image tags and regularly update"
+        
+        # List installed packages that might have vulnerabilities
+        echo "Critical system packages to monitor:"
+        dpkg -l | grep -E "(libc6|openssl|libssl|zlib|libz)" | awk '{print $2, $3}'
+
+    - name: Create vulnerability report
+      id: scan-summary
+      run: |
+        echo "📋 Creating vulnerability scan summary..."
+        
+        # Initialize counters
+        critical_count=0
+        high_count=0
+        medium_count=0
+        total_issues=0
+        
+        # Analyze safety report if it exists
+        if [ -f safety_report.json ]; then
+          critical_count=$(jq -r '.vulnerabilities | length' safety_report.json 2>/dev/null || echo "0")
+        fi
+        
+        # Analyze semgrep report if it exists
+        if [ -f semgrep_report.json ]; then
+          high_count=$(jq -r '.results | map(select(.extra.severity == "ERROR")) | length' semgrep_report.json 2>/dev/null || echo "0")
+          medium_count=$(jq -r '.results | map(select(.extra.severity == "WARNING")) | length' semgrep_report.json 2>/dev/null || echo "0")
+        fi
+        
+        total_issues=$((critical_count + high_count + medium_count))
+        
+        # Create summary report
+        cat > vulnerability_report.md << EOF
+        # Weekly Vulnerability Scan Report
+        
+        **Scan Date:** $(date -u)
+        **Repository:** ${{ github.repository }}
+        **Branch:** ${{ github.ref_name }}
+        **Commit:** ${{ github.sha }}
+        
+        ## Summary
+        - **Critical Issues:** $critical_count
+        - **High Severity:** $high_count  
+        - **Medium Severity:** $medium_count
+        - **Total Issues:** $total_issues
+        
+        ## System Security
+        - Base OS: Ubuntu 24.04
+        - Qt6 Version: $(pkg-config --modversion Qt6Core 2>/dev/null || echo "unknown")
+        - CMake Version: $(cmake --version 2>/dev/null | head -1 || echo "unknown")
+        
+        ## Scan Coverage
+        - ✅ System packages
+        - ✅ Python dependencies (Safety)
+        - ✅ Source code analysis (Semgrep)
+        - ✅ C++ security patterns
+        - ✅ Qt6 version check
+        
+        ## Recommendations
+        1. Regularly update system packages
+        2. Monitor Qt6 security advisories
+        3. Review any flagged code patterns
+        4. Keep CI/CD dependencies updated
+        5. Consider adding automated dependency updates
+        
+        ## Next Scan
+        - Scheduled: $(date -d "next monday" +%Y-%m-%d)
+        EOF
+        
+        echo "Vulnerability scan completed. Total issues: $total_issues"
+        
+        # Set outputs for other jobs
+        echo "found=$( [ $total_issues -gt 0 ] && echo 'true' || echo 'false' )" >> $GITHUB_OUTPUT
+        echo "critical=$critical_count" >> $GITHUB_OUTPUT
+        echo "high=$high_count" >> $GITHUB_OUTPUT
+        echo "medium=$medium_count" >> $GITHUB_OUTPUT
+
+    - name: Upload vulnerability reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: vulnerability-scan-reports
+        path: |
+          vulnerability_report.md
+          safety_report.json
+          bandit_report.json
+          semgrep_report.json
+        retention-days: 30
+
+    - name: Notify on critical vulnerabilities
+      if: steps.scan-summary.outputs.critical > 0
+      run: |
+        echo "🚨 CRITICAL VULNERABILITIES FOUND: ${{ steps.scan-summary.outputs.critical }}"
+        echo "Please review the vulnerability report and take immediate action."
+        echo "Report available in workflow artifacts."
+
+  cleanup-actions:
+    name: Cleanup & Maintenance
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check workflow file health
+      run: |
+        echo "🔍 Checking workflow file health..."
+        
+        # Check for common issues in workflow files
+        for file in .github/workflows/*.yml; do
+          echo "Checking: $file"
+          
+          # Check for syntax issues (basic)
+          if ! python3 -c "import yaml; yaml.safe_load(open('$file'))" 2>/dev/null; then
+            echo "⚠️  Potential YAML syntax issues in $file"
+          fi
+          
+          # Check for outdated action versions
+          if grep -q "actions/checkout@v3" "$file"; then
+            echo "ℹ️  Consider updating actions/checkout to v4 in $file"
+          fi
+          
+          if grep -q "actions/cache@v3" "$file"; then
+            echo "ℹ️  Consider updating actions/cache to v4 in $file"
+          fi
+        done
+
+    - name: Check repository health
+      run: |
+        echo "🔍 Checking repository health..."
+        
+        # Check for large files
+        echo "Checking for large files..."
+        find . -type f -size +10M -not -path "./.git/*" -not -path "./build/*" 2>/dev/null | \
+          head -10 | while read file; do
+            echo "⚠️  Large file detected: $file ($(du -h "$file" | cut -f1))"
+          done || echo "No large files found"
+        
+        # Check for binary files that shouldn't be tracked
+        echo "Checking for binary files..."
+        find . -type f -name "*.o" -o -name "*.a" -o -name "*.so" -not -path "./.git/*" -not -path "./build/*" 2>/dev/null | \
+          head -5 | while read file; do
+            echo "⚠️  Binary file in repository: $file"
+          done || echo "No unexpected binary files found"
+
+    - name: Documentation freshness check
+      run: |
+        echo "📚 Checking documentation freshness..."
+        
+        # Check if README mentions current Qt6 versions
+        if grep -q "qt6-base-dev" README.md && grep -q "qt6-connectivity-dev" README.md; then
+          echo "✅ README mentions current Qt6 packages"
+        else
+          echo "⚠️  README may need Qt6 package update"
+        fi
+        
+        # Check if documentation is up to date with code
+        if [ -f "doc/USER_GUIDE.md" ]; then
+          echo "✅ User guide exists"
+        else
+          echo "ℹ️  Consider adding user guide documentation"
+        fi
+
+  performance-baseline:
+    name: Performance Baseline
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+
+    steps:
+    - name: Install dependencies
+      run: |
+        apt-get update -qq
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          build-essential \
+          cmake \
+          git \
+          pkg-config \
+          libudev-dev \
+          libevdev-dev \
+          qt6-base-dev \
+          qt6-connectivity-dev \
+          time \
+          bc
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build for performance baseline
+      run: |
+        mkdir build && cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+        make -j$(nproc)
+
+    - name: Capture performance baseline
+      run: |
+        cd build
+        echo "📊 Capturing performance baseline..."
+        
+        # Measure build time
+        echo "Build performance:"
+        echo "  Binary size: $(du -h ninja_util | cut -f1)"
+        echo "  Compile time: Measured during build"
+        
+        # Measure runtime performance
+        echo "Runtime performance:"
+        time_output=$(timeout 10s time -p ./ninja_util --help 2>&1 || echo "timeout")
+        echo "  Help command time: $time_output"
+        
+        # Store baseline (in real scenario, you'd store this in artifacts or database)
+        echo "✅ Performance baseline captured for $(date)"

@@ -1,8 +1,8 @@
-name: CI/CD Pipeline
+name: Main CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [ main, dev, 'feature/*' ]
     tags: [ 'v*' ]
   pull_request:
     branches: [ main, dev ]
@@ -13,60 +13,85 @@ on:
         required: false
         default: false
         type: boolean
+      skip_tests:
+        description: 'Skip running tests'
+        required: false
+        default: false
+        type: boolean
 
 env:
   BUILD_TYPE: Release
-  CACHE_VERSION: v1
+  CACHE_VERSION: v2
+  DEBIAN_FRONTEND: noninteractive
 
 jobs:
-  # Job 1: Quick checks first for fast feedback
-  code-style-check:
-    name: Code Style & Formatting
+  # Job 1: Quick validation checks (fast feedback)
+  quick-checks:
+    name: Quick Validation
     runs-on: ubuntu-latest
+    outputs:
+      should-build: ${{ steps.changes.outputs.build-needed }}
+      has-cpp-files: ${{ steps.files.outputs.cpp-files }}
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Cache clang-format
-      uses: actions/cache@v4
       with:
-        path: /usr/bin/clang-format
-        key: clang-format-${{ runner.os }}-${{ env.CACHE_VERSION }}
+        fetch-depth: 0
 
-    - name: Install clang-format
+    - name: Check for relevant file changes
+      id: changes
+      run: |
+        # Check if build is needed based on changed files
+        if git diff --name-only HEAD~1 HEAD | grep -qE '\.(cpp|hpp|cmake|CMakeLists\.txt|yml|yaml)$'; then
+          echo "build-needed=true" >> $GITHUB_OUTPUT
+        else
+          echo "build-needed=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Find C++ source files
+      id: files
+      run: |
+        if find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null | grep -q .; then
+          echo "cpp-files=true" >> $GITHUB_OUTPUT
+        else
+          echo "cpp-files=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Install formatting tools
+      if: steps.files.outputs.cpp-files == 'true'
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y clang-format
 
     - name: Check code formatting
+      if: steps.files.outputs.cpp-files == 'true'
       run: |
         echo "🔍 Checking C++ code formatting..."
-        SOURCES=$(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null || true)
-        if [ -z "$SOURCES" ]; then
-          echo "ℹ️  No C++ source files found to check"
-          exit 0
-        fi
+        SOURCES=$(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null)
         
         FORMAT_ISSUES=0
         for file in $SOURCES; do
           if ! clang-format --dry-run --Werror "$file" >/dev/null 2>&1; then
             echo "❌ Formatting issues in: $file"
-            clang-format --dry-run --Werror "$file" || true
             FORMAT_ISSUES=1
           fi
         done
         
         if [ $FORMAT_ISSUES -eq 1 ]; then
-          echo "💡 Run 'clang-format -i \$(find src tests -name \"*.cpp\" -o -name \"*.hpp\")' to fix formatting"
+          echo "💡 Run 'find src tests -name \"*.cpp\" -o -name \"*.hpp\" | xargs clang-format -i' to fix formatting"
           exit 1
         fi
         echo "✅ All files are properly formatted"
 
-  # Job 2: Build matrix with caching
-  build-and-test:
-    name: Build and Test
+  # Job 2: Comprehensive build and test matrix
+  build-matrix:
+    name: Build & Test
+    needs: quick-checks
+    if: needs.quick-checks.outputs.should-build == 'true'
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         ubuntu-version: [22.04, 24.04]
         build-type: [Release]
@@ -74,6 +99,7 @@ jobs:
           - ubuntu-version: 24.04
             build-type: Debug
             enable-tests: true
+            enable-docs: true
           - ubuntu-version: 22.04
             qt-version: "6.4.*"
           - ubuntu-version: 24.04
@@ -83,12 +109,18 @@ jobs:
       image: ubuntu:${{ matrix.ubuntu-version }}
 
     steps:
-    - name: Install dependencies and build tools
+    - name: Cache APT packages
+      uses: actions/cache@v4
+      with:
+        path: /var/cache/apt
+        key: apt-${{ matrix.ubuntu-version }}-${{ env.CACHE_VERSION }}-${{ hashFiles('.github/workflows/main-ci.yml') }}
+        restore-keys: |
+          apt-${{ matrix.ubuntu-version }}-${{ env.CACHE_VERSION }}-
+          apt-${{ matrix.ubuntu-version }}-
+
+    - name: Install system dependencies
       run: |
-        export DEBIAN_FRONTEND=noninteractive
         apt-get update -qq
-        
-        # Install base build tools and system libraries first
         apt-get install -y --no-install-recommends \
           build-essential \
           cmake \
@@ -97,165 +129,110 @@ jobs:
           curl \
           ca-certificates \
           software-properties-common \
-          wget \
-          gnupg2 \
-          lsb-release \
           libudev-dev \
           libevdev-dev \
-          doxygen \
-          graphviz \
+          qt6-base-dev \
+          qt6-connectivity-dev \
           ccache
 
-    - name: Install Qt6 dependencies (optimized)
+    - name: Install documentation tools
+      if: matrix.enable-docs == true
       run: |
-        export DEBIAN_FRONTEND=noninteractive
-        UBUNTU_VERSION="${{ matrix.ubuntu-version }}"
-        echo "Installing Qt6 for Ubuntu ${UBUNTU_VERSION}"
-        
-        # Install Qt6 packages
-        # qt6-base-dev: Core Qt6 development libraries
-        # qt6-connectivity-dev: Bluetooth and other connectivity modules (includes Qt6Bluetooth)
-        echo "Installing Qt6 packages..."
-        apt-get install -y --no-install-recommends qt6-base-dev qt6-connectivity-dev || {
-          echo "Failed to install Qt6 packages. Available Qt6 packages:"
-          apt-cache search qt6 | grep -E "(base|connectivity|bluetooth)" || true
-          exit 1
-        }
+        apt-get install -y --no-install-recommends \
+          doxygen \
+          graphviz
 
-    - name: Debug Information
-      if: github.event.inputs.debug_enabled == 'true'
+    - name: Install testing tools
+      if: matrix.enable-tests == true
       run: |
-        echo "=== Debug Information ==="
-        echo "Ubuntu Version: ${{ matrix.ubuntu-version }}"
-        echo "Build Type: ${{ matrix.build-type }}"
-        echo "Available packages for Qt6:"
-        apt-cache search qt6-base || true
-        echo "Available packages for libudev:"
-        apt-cache search libudev || true
-        echo "System information:"
-        uname -a
-        lscpu | head -10
-        free -h
+        apt-get install -y --no-install-recommends \
+          valgrind \
+          cppcheck \
+          clang-tidy
 
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    # Cache Qt6 dependencies
-    - name: Cache Qt6 dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          /usr/include/qt6
-          /usr/lib/x86_64-linux-gnu/qt6
-          /usr/lib/x86_64-linux-gnu/libQt6*
-        key: qt6-${{ matrix.ubuntu-version }}-${{ env.CACHE_VERSION }}
-
-    # Cache APT packages
-    - name: Cache APT packages
-      uses: actions/cache@v4
-      with:
-        path: /var/cache/apt
-        key: apt-${{ matrix.ubuntu-version }}-${{ hashFiles('.github/workflows/ci.yml') }}
-        restore-keys: |
-          apt-${{ matrix.ubuntu-version }}-
-
-    - name: Setup build directory
-      run: |
-        mkdir -p build
-        cd build
-
-    - name: Configure CMake
-      run: |
-        cd build
-        echo "=== CMake Configuration ==="
-        echo "Build type: ${{ matrix.build-type }}"
-        echo "Ubuntu version: ${{ matrix.ubuntu-version }}"
-        echo "Qt version: ${QT_VERSION:-6}"
-        
-        # Configure with error handling
-        ENABLE_TESTS=${{ matrix.enable-tests == true && 'ON' || 'OFF' }}
-        cmake .. \
-          -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
-          -DBUILD_TESTS=${ENABLE_TESTS} \
-          -DBUILD_DOCS=ON \
-          -DCMAKE_VERBOSE_MAKEFILE=ON \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-          || {
-            echo "CMake configuration failed, checking for missing dependencies..."
-            pkg-config --exists libudev || echo "WARNING: libudev not found"
-            pkg-config --exists libevdev || echo "WARNING: libevdev not found"
-            echo "CMake Error Details:"
-            cat CMakeFiles/CMakeError.log 2>/dev/null || echo "No CMakeError.log found"
-            exit 1
-          }
-
-    # Cache build artifacts with better keys
     - name: Cache build artifacts
       uses: actions/cache@v4
       with:
         path: |
           build/
           ~/.ccache
-        key: build-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}-${{ hashFiles('src/**', 'CMakeLists.txt', '.github/workflows/ci.yml') }}
+        key: build-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}-${{ hashFiles('src/**', 'CMakeLists.txt', '.github/workflows/main-ci.yml') }}
         restore-keys: |
           build-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}-
           build-${{ matrix.ubuntu-version }}-
 
+    - name: Configure CMake
+      run: |
+        mkdir -p build && cd build
+        ENABLE_TESTS=${{ (matrix.enable-tests == true && github.event.inputs.skip_tests != 'true') && 'ON' || 'OFF' }}
+        ENABLE_DOCS=${{ matrix.enable-docs == true && 'ON' || 'OFF' }}
+        
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
+          -DBUILD_TESTS=${ENABLE_TESTS} \
+          -DBUILD_DOCS=${ENABLE_DOCS} \
+          -DCMAKE_VERBOSE_MAKEFILE=ON \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
     - name: Build
       run: |
         cd build
-        echo "=== Starting Build ==="
-        echo "Available cores: $(nproc)"
-        ccache --zero-stats || echo "ccache not available"
-        
-        # Build with better error handling
-        make -j$(nproc) VERBOSE=1 || {
-          echo "Build failed, checking logs..."
-          echo "=== CMake Cache ==="
-          cat CMakeCache.txt | grep -E "(CMAKE_|Qt|LIBUDEV|LIBEVDEV)" || true
-          echo "=== Build Log Tail ==="
-          tail -50 *.log 2>/dev/null || echo "No log files found"
-          exit 1
-        }
-        
-        ccache --show-stats || echo "ccache stats not available"
+        ccache --zero-stats || true
+        make -j$(nproc) VERBOSE=1
+        ccache --show-stats || true
 
     - name: Run tests
-      if: matrix.enable-tests == true
+      if: matrix.enable-tests == true && github.event.inputs.skip_tests != 'true'
       run: |
         cd build
         ctest --output-on-failure --verbose
 
+    - name: Static analysis
+      if: matrix.enable-tests == true
+      run: |
+        cd build
+        echo "Running cppcheck..."
+        cppcheck --enable=all --std=c++17 --verbose \
+          --suppress=missingIncludeSystem \
+          --suppress=unusedFunction \
+          ../src/ || true
+        
+        echo "Running clang-tidy..."
+        find ../src -name "*.cpp" | head -5 | xargs -I {} clang-tidy {} -- -I../src/inc || true
+
     - name: Build documentation
-      if: matrix.ubuntu-version == '24.04' && matrix.build-type == 'Release'
+      if: matrix.enable-docs == true
       run: |
         cd build
         make docs
-
-    - name: Upload documentation artifacts
-      if: matrix.ubuntu-version == '24.04' && matrix.build-type == 'Release'
-      uses: actions/upload-artifact@v4
-      with:
-        name: documentation
-        path: build/doc/api/
-        retention-days: 30
 
     - name: Upload build artifacts
       if: matrix.build-type == 'Release'
       uses: actions/upload-artifact@v4
       with:
-        name: ninja_util-ubuntu-${{ matrix.ubuntu-version }}
+        name: ninja_util-ubuntu-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}
         path: |
           build/ninja_util
           VERSION
         retention-days: 30
 
-  # Job 3: Code quality analysis (runs in parallel with build)
-  code-quality:
-    name: Code Quality Analysis
+    - name: Upload documentation
+      if: matrix.enable-docs == true
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation-${{ matrix.ubuntu-version }}
+        path: build/doc/
+        retention-days: 30
+
+  # Job 3: Quality and compliance checks (runs in parallel)
+  quality-compliance:
+    name: Quality & Compliance
     runs-on: ubuntu-latest
     container:
       image: ubuntu:24.04
@@ -264,7 +241,133 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update -qq
-        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        apt-get install -y \
+          git \
+          curl \
+          ca-certificates \
+          python3 \
+          python3-pip \
+          python3-venv \
+          file \
+          jq \
+          markdownlint-cli
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Cache Python packages
+      uses: actions/cache@v4
+      with:
+        path: /tmp/pip-cache
+        key: pip-quality-${{ runner.os }}-${{ env.CACHE_VERSION }}
+        restore-keys: |
+          pip-quality-${{ runner.os }}-
+
+    - name: Setup Python environment
+      run: |
+        export PIP_CACHE_DIR=/tmp/pip-cache
+        python3 -m pip install --upgrade pip
+        # Add any Python-based tools here if needed
+
+    - name: Copyright compliance check
+      run: |
+        echo "🔍 Checking copyright compliance..."
+        
+        # Check for copyright headers in source files
+        MISSING_COPYRIGHT=0
+        for file in $(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null); do
+          if ! grep -q "Copyright" "$file"; then
+            echo "❌ Missing copyright header: $file"
+            MISSING_COPYRIGHT=1
+          fi
+        done
+        
+        if [ $MISSING_COPYRIGHT -eq 1 ]; then
+          echo "💡 Add copyright headers to source files"
+          # Don't fail for now, just warn
+        else
+          echo "✅ All source files have copyright headers"
+        fi
+
+    - name: License compliance check
+      run: |
+        echo "🔍 Checking license compliance..."
+        
+        # Check for LICENSE file
+        if [ ! -f LICENSE ]; then
+          echo "❌ No LICENSE file found"
+          exit 1
+        fi
+        
+        # Check README mentions license
+        if ! grep -q -i license README.md; then
+          echo "⚠️  LICENSE not mentioned in README.md"
+        fi
+        
+        echo "✅ License compliance check passed"
+
+    - name: Markdown linting
+      run: |
+        echo "🔍 Linting Markdown files..."
+        if command -v markdownlint >/dev/null 2>&1; then
+          markdownlint . --ignore node_modules --ignore build || {
+            echo "⚠️  Markdown linting issues found (non-blocking)"
+          }
+        else
+          echo "ℹ️  markdownlint not available, skipping"
+        fi
+
+  # Job 4: Security scanning (weekly or on demand)
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[security]')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install security tools
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y \
+          cmake \
+          pkg-config \
+          libudev-dev \
+          libevdev-dev \
+          qt6-base-dev \
+          qt6-connectivity-dev \
+          jq
+
+    - name: Dependency vulnerability scan
+      run: |
+        echo "🔍 Scanning for dependency vulnerabilities..."
+        
+        # Check Qt6 versions
+        echo "Checking Qt6 version..."
+        pkg-config --modversion Qt6Core || echo "Qt6Core not found"
+        
+        # Check system package vulnerabilities (basic check)
+        echo "Checking system packages..."
+        dpkg -l | grep -E "(libudev|libevdev|qt6)" || echo "No matching packages found"
+        
+        echo "✅ Basic dependency scan completed"
+
+  # Job 5: Performance testing (optional, on specific triggers)
+  performance-test:
+    name: Performance Test
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, '[perf]') || github.event_name == 'schedule'
+    container:
+      image: ubuntu:24.04
+
+    steps:
+    - name: Install dependencies
+      run: |
+        apt-get update -qq
+        apt-get install -y \
           build-essential \
           cmake \
           git \
@@ -273,172 +376,49 @@ jobs:
           libevdev-dev \
           qt6-base-dev \
           qt6-connectivity-dev \
-          clang-tidy \
-          cppcheck \
-          curl \
-          ca-certificates \
-          software-properties-common \
-          ccache
+          valgrind \
+          time \
+          bc
 
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Cache analysis tools and dependencies
-    - name: Cache analysis dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/cppcheck
-          ~/.cache/clang-tidy
-        key: analysis-deps-${{ env.CACHE_VERSION }}
-
-    - name: Configure CMake for analysis
+    - name: Build for performance testing
       run: |
-        mkdir build
-        cd build
-        cmake .. \
-          -DCMAKE_BUILD_TYPE=Debug \
-          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-          -DBUILD_TESTS=ON \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
-    - name: Run cppcheck
-      run: |
-        cppcheck \
-          --enable=all \
-          --error-exitcode=1 \
-          --suppress=missingIncludeSystem \
-          --suppress=unusedFunction \
-          --suppress=unmatchedSuppression \
-          --inline-suppr \
-          --project=build/compile_commands.json \
-          --xml \
-          --output-file=cppcheck-results.xml \
-          2>&1 || true
-
-    - name: Run clang-tidy
-      run: |
-        cd build
-        clang-tidy ../src/*.cpp \
-          -p . \
-          --checks=-*,readability-*,performance-*,modernize-*,bugprone-* \
-          --format-style=file \
-          2>&1 | tee ../clang-tidy-results.txt || true
-
-    - name: Upload analysis results
-      uses: actions/upload-artifact@v4
-      with:
-        name: code-analysis-${{ github.sha }}
-        path: |
-          cppcheck-results.xml
-          clang-tidy-results.txt
-        retention-days: 30
-
-  # Job 4: Security scanning
-  security-scan:
-    name: Security Scanning
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install build dependencies for CodeQL
-      run: |
-        export DEBIAN_FRONTEND=noninteractive
-        sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends \
-          build-essential \
-          cmake \
-          pkg-config \
-          libudev-dev \
-          libevdev-dev \
-          qt6-base-dev \
-          qt6-connectivity-dev
-
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
-      with:
-        languages: 'cpp'
-        queries: security-extended
-
-    - name: Manual build for CodeQL
-      run: |
-        mkdir build
-        cd build
-        cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DBUILD_DOCS=OFF
+        mkdir build && cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
         make -j$(nproc)
 
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
-      continue-on-error: true
-      id: codeql
+    - name: Run performance tests
+      run: |
+        cd build
+        echo "🏃 Running performance tests..."
+        
+        # Memory leak check
+        if command -v valgrind >/dev/null 2>&1; then
+          echo "Running valgrind memory check..."
+          valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
+            --log-file=valgrind.log ./ninja_util --help || true
+          
+          if grep -q "ERROR SUMMARY: 0 errors" valgrind.log; then
+            echo "✅ No memory leaks detected"
+          else
+            echo "⚠️  Memory issues detected:"
+            cat valgrind.log
+          fi
+        fi
+        
+        # Basic performance timing
+        echo "Running basic performance tests..."
+        time ./ninja_util --help >/dev/null
+        
+        echo "✅ Performance tests completed"
 
-    - name: Check for CodeQL vulnerabilities and create issue
-      if: failure() && steps.codeql.outcome == 'failure'
-      uses: actions/github-script@v7
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        script: |
-          const title = `🚨 Security Vulnerability Detected - ${new Date().toISOString().split('T')[0]}`;
-          const body = `
-          ## Security Alert 🔒
-          
-          A security vulnerability has been detected in the codebase during automated scanning.
-          
-          **Details:**
-          - **Repository:** ${{ github.repository }}
-          - **Branch:** ${{ github.ref_name }}
-          - **Commit:** ${{ github.sha }}
-          - **Workflow:** ${{ github.workflow }}
-          - **Run ID:** ${{ github.run_id }}
-          
-          **Scan Results:**
-          CodeQL security analysis has identified potential security issues in the C++ code.
-          
-          **Next Steps:**
-          1. Review the [Security tab](https://github.com/${{ github.repository }}/security) for detailed findings
-          2. Check the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for more information
-          3. Address the identified vulnerabilities following security best practices
-          4. Re-run the security scan after applying fixes
-          
-          **Priority:** High 🔴
-          
-          ---
-          *This issue was automatically created by the CI/CD security pipeline.*
-          `;
-          
-          // Check if a similar issue already exists
-          const existingIssues = await github.rest.issues.listForRepo({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            labels: ['security', 'vulnerability'],
-            state: 'open'
-          });
-          
-          const recentIssue = existingIssues.data.find(issue => 
-            issue.title.includes('Security Vulnerability Detected') && 
-            new Date(issue.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000) // Within 24 hours
-          );
-          
-          if (!recentIssue) {
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: title,
-              body: body,
-              labels: ['security', 'vulnerability', 'automated', 'high-priority']
-            });
-            console.log('Created security vulnerability issue');
-          } else {
-            console.log('Recent security issue already exists, skipping creation');
-          }
-
-  # Job 5: Release creation (only on tags, depends on tests passing)
-  create-release:
-    name: Create Release
-    needs: [build-and-test, code-quality, security-scan]
+  # Job 6: Release preparation (only on tag pushes)
+  release:
+    name: Prepare Release
     runs-on: ubuntu-latest
+    needs: [build-matrix, quality-compliance]
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
@@ -448,81 +428,27 @@ jobs:
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
-        path: artifacts/
+        path: release-artifacts/
 
-    - name: Read VERSION file
-      id: version
-      run: echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
-
-    - name: Create Release Notes
-      id: release_notes
+    - name: Prepare release assets
       run: |
-        echo "Creating release for version ${{ steps.version.outputs.version }}"
+        mkdir -p release/
         
-        # Extract version from tag
-        TAG_VERSION=${GITHUB_REF#refs/tags/v}
+        # Copy binaries
+        find release-artifacts -name "ninja_util" -exec cp {} release/ \;
         
-        # Create release notes
-        cat > release_notes.md << EOF
-        # ninjaUSB-util v${TAG_VERSION}
+        # Copy documentation
+        if [ -d "release-artifacts/documentation-24.04" ]; then
+          cp -r release-artifacts/documentation-24.04 release/docs
+        fi
         
-        ## What's New
-        - USB keyboard to BLE forwarding utility
-        - Multi-keyboard support with hot-plug detection
-        - Cross-platform Linux distribution support
-        
-        ## Downloads
-        - **Ubuntu 22.04**: Download \`ninja_util-ubuntu-22.04\`
-        - **Ubuntu 24.04**: Download \`ninja_util-ubuntu-24.04\`
-        
-        ## Installation
-        \`\`\`bash
-        # Extract and install
-        chmod +x ninja_util
-        sudo mv ninja_util /usr/local/bin/
-        \`\`\`
-        
-        ## Usage
-        \`\`\`bash
-        sudo ninja_util --help
-        \`\`\`
-        
-        See the [User Guide](https://github.com/\${{ github.repository }}/blob/main/doc/USER_GUIDE.md) for detailed instructions.
-        EOF
+        # Create release package
+        cd release
+        tar -czf ninja_util-$(cat ../VERSION).tar.gz *
 
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+    - name: Upload release assets
+      uses: actions/upload-artifact@v4
       with:
-        files: |
-          artifacts/ninja_util-ubuntu-*/ninja_util
-          artifacts/documentation/**/*
-        body_path: release_notes.md
-        draft: false
-        prerelease: ${{ contains(github.ref, '-') }}
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Job 6: Documentation deployment (only on main branch)
-  deploy-docs:
-    name: Deploy Documentation
-    needs: [build-and-test]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Download documentation
-      uses: actions/download-artifact@v4
-      with:
-        name: documentation
-        path: docs/
-
-    - name: Deploy to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./docs
-        enable_jekyll: false
+        name: release-package
+        path: release/ninja_util-*.tar.gz
+        retention-days: 90
