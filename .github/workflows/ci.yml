@@ -112,18 +112,9 @@ jobs:
         UBUNTU_VERSION="${{ matrix.ubuntu-version }}"
         echo "Installing Qt6 for Ubuntu ${UBUNTU_VERSION}"
         
-        # Simplified Qt6 installation with timeout protection
-        timeout 240 bash -c '
-          echo "Installing Qt6 packages..."
-          apt-get install -y --no-install-recommends qt6-base-dev qt6-connectivity-dev
-        ' || {
-          echo "Qt6 installation timed out or failed, trying Qt5 fallback"
-          apt-get install -y --no-install-recommends qtbase5-dev qtconnectivity5-dev || {
-            echo "Both Qt6 and Qt5 installation failed"
-            exit 1
-          }
-          echo "QT_VERSION=5" >> $GITHUB_ENV
-        }
+        # Install Qt6 packages (latest version only)
+        echo "Installing Qt6 packages..."
+        apt-get install -y --no-install-recommends qt6-base-dev libqt6bluetooth6-dev
 
     - name: Debug Information
       if: github.event.inputs.debug_enabled == 'true'

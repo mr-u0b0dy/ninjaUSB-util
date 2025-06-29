@@ -602,37 +602,20 @@ jobs:
           doxygen \
           graphviz \
           curl \
-          ca-certificates \
-        || {
-          echo "Qt6 Bluetooth not available, falling back to Qt5..."
-          apt-get install -y \
-            qt5-default \
-            qtconnectivity5-dev \
-            libqt5bluetooth5-dev
-        }
+          ca-certificates
 
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Detect Qt Version
-      id: qt-version
+    - name: Verify Qt6 Installation
       run: |
-        echo "🔍 Detecting available Qt version..."
+        echo "🔍 Verifying Qt6 installation..."
         
         if pkg-config --exists Qt6Core; then
           QT_VERSION=$(pkg-config --modversion Qt6Core)
-          echo "qt-major=6" >> $GITHUB_OUTPUT
-          echo "qt-version=$QT_VERSION" >> $GITHUB_OUTPUT
           echo "✅ Qt6 detected: $QT_VERSION"
-        elif pkg-config --exists Qt5Core; then
-          QT_VERSION=$(pkg-config --modversion Qt5Core)
-          echo "qt-major=5" >> $GITHUB_OUTPUT
-          echo "qt-version=$QT_VERSION" >> $GITHUB_OUTPUT
-          echo "✅ Qt5 detected: $QT_VERSION"
         else
-          echo "❌ No Qt installation detected"
-          echo "qt-major=none" >> $GITHUB_OUTPUT
-          echo "qt-version=none" >> $GITHUB_OUTPUT
+          echo "❌ Qt6 installation failed"
           exit 1
         fi
 
@@ -640,8 +623,8 @@ jobs:
       run: |
         echo "🔍 Verifying build environment..."
         
-        echo "📦 Installed Qt packages:"
-        dpkg -l | grep -E "(qt5|qt6)" | head -10
+        echo "📦 Installed Qt6 packages:"
+        dpkg -l | grep qt6 | head -10
         
         echo ""
         echo "🔧 CMake version:"
@@ -653,43 +636,26 @@ jobs:
         g++ --version | head -1
         
         echo ""
-        echo "📋 pkg-config Qt modules:"
-        pkg-config --list-all | grep -E "(Qt5|Qt6)" | head -10
+        echo "📋 pkg-config Qt6 modules:"
+        pkg-config --list-all | grep Qt6 | head -10
         
         echo ""
-        echo "🔍 Qt installation paths:"
-        if [ "${{ steps.qt-version.outputs.qt-major }}" = "6" ]; then
-          pkg-config --variable=prefix Qt6Core || echo "Qt6Core prefix not found"
-          pkg-config --cflags Qt6Core || echo "Qt6Core cflags not found"
-        else
-          pkg-config --variable=prefix Qt5Core || echo "Qt5Core prefix not found"
-          pkg-config --cflags Qt5Core || echo "Qt5Core cflags not found"
-        fi
+        echo "🔍 Qt6 installation paths:"
+        pkg-config --variable=prefix Qt6Core || echo "Qt6Core prefix not found"
+        pkg-config --cflags Qt6Core || echo "Qt6Core cflags not found"
 
     - name: Configure CMake for documentation
       run: |
         mkdir build
         cd build
         
-        # Use detected Qt version for configuration
-        QT_MAJOR="${{ steps.qt-version.outputs.qt-major }}"
-        QT_VERSION="${{ steps.qt-version.outputs.qt-version }}"
-        
-        echo "🔧 Configuring CMake with Qt${QT_MAJOR} (${QT_VERSION})"
-        
-        if [ "$QT_MAJOR" = "6" ]; then
-          cmake .. -DBUILD_DOCS=ON -DQT_VERSION_MAJOR=6
-        elif [ "$QT_MAJOR" = "5" ]; then
-          cmake .. -DBUILD_DOCS=ON -DQT_VERSION_MAJOR=5
-        else
-          echo "❌ Unsupported Qt version"
-          exit 1
-        fi
+        echo "🔧 Configuring CMake with Qt6"
+        cmake .. -DBUILD_DOCS=ON
 
     - name: Build documentation
       run: |
         cd build
-        echo "🔍 Building Doxygen documentation with Qt${{ steps.qt-version.outputs.qt-major }}..."
+        echo "🔍 Building Doxygen documentation with Qt6..."
         
         # Check if documentation target exists
         if make help | grep -q "docs"; then
@@ -896,8 +862,6 @@ jobs:
            [ "$LINK_CHECK" = "success" ]; then
           echo "✅ All quality checks passed!"
           echo "🚀 Code is ready for merge!"
-          echo ""
-          echo "ℹ️  Note: This project supports both Qt5 and Qt6 through version detection macros."
         else
           echo "❌ Some quality checks failed!"
           echo ""
@@ -906,11 +870,9 @@ jobs:
           [ "$MARKDOWN_LINT" != "success" ] && echo "  - 📝 Markdown linting issues found"
           [ "$MERMAID_CHECK" != "success" ] && echo "  - 📊 Mermaid diagram issues found"
           [ "$COPYRIGHT_CHECK" != "success" ] && echo "  - ⚖️  Copyright compliance issues found"
-          [ "$DOCS_CHECK" != "success" ] && echo "  - 📚 Documentation issues found (Qt version compatibility checked)"
+          [ "$DOCS_CHECK" != "success" ] && echo "  - 📚 Documentation issues found"
           [ "$LINK_CHECK" != "success" ] && echo "  - 🔗 Link validation failed"
           echo ""
           echo "Please review the failed checks above before merging."
-          echo ""
-          echo "ℹ️  Note: Documentation builds support both Qt5 and Qt6 with automatic detection."
           exit 1
         fi

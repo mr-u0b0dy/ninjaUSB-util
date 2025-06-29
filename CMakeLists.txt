@@ -58,27 +58,18 @@ if(NOT LIBEVDEV_FOUND)
         "  Arch: sudo pacman -S libevdev")
 endif()
 
-# Try Qt6 first, fall back to Qt5 if needed
-find_package(Qt6 QUIET COMPONENTS Core Bluetooth)
-if(Qt6_FOUND)
-    message(STATUS "Using Qt6")
-    set(QT_VERSION_MAJOR 6)
-    # Use conditional Qt setup based on version availability
-    if(Qt6_VERSION VERSION_GREATER_EQUAL "6.5")
-        qt_standard_project_setup(REQUIRES 6.5)
-    else()
-        qt_standard_project_setup()
-    endif()
-    set(QT_LIBRARIES Qt6::Core Qt6::Bluetooth)
+# Qt6 is required - no fallback to older versions
+find_package(Qt6 REQUIRED COMPONENTS Core Bluetooth)
+message(STATUS "Using Qt6")
+
+# Use conditional Qt setup based on version availability
+if(Qt6_VERSION VERSION_GREATER_EQUAL "6.5")
+    qt_standard_project_setup(REQUIRES 6.5)
 else()
-    message(STATUS "Qt6 not found, trying Qt5")
-    find_package(Qt5 REQUIRED COMPONENTS Core Bluetooth)
-    set(QT_VERSION_MAJOR 5)
-    set(CMAKE_AUTOMOC ON)
-    set(CMAKE_AUTORCC ON)
-    set(CMAKE_AUTOUIC ON)
-    set(QT_LIBRARIES Qt5::Core Qt5::Bluetooth)
+    qt_standard_project_setup()
 endif()
+
+set(QT_LIBRARIES Qt6::Core Qt6::Bluetooth)
 
 # Generate build information
 string(TIMESTAMP BUILD_DATE "%Y-%m-%d")
