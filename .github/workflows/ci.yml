@@ -472,7 +472,6 @@ jobs:
         - Cross-platform Linux distribution support
         
         ## Downloads
-        - **Ubuntu 20.04**: Download \`ninja_util-ubuntu-20.04\`
         - **Ubuntu 22.04**: Download \`ninja_util-ubuntu-22.04\`
         - **Ubuntu 24.04**: Download \`ninja_util-ubuntu-24.04\`
         

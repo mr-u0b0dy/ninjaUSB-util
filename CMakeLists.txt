@@ -63,10 +63,17 @@ find_package(Qt6 REQUIRED COMPONENTS Core Bluetooth)
 message(STATUS "Using Qt6")
 
 # Use conditional Qt setup based on version availability
-if(Qt6_VERSION VERSION_GREATER_EQUAL "6.5")
-    qt_standard_project_setup(REQUIRES 6.5)
+if(Qt6_VERSION VERSION_GREATER_EQUAL "6.3")
+    if(Qt6_VERSION VERSION_GREATER_EQUAL "6.5")
+        qt_standard_project_setup(REQUIRES 6.5)
+    else()
+        qt_standard_project_setup()
+    endif()
 else()
-    qt_standard_project_setup()
+    # Fallback for older Qt6 versions (< 6.3) like Ubuntu 22.04
+    set(CMAKE_AUTOMOC ON)
+    set(CMAKE_AUTORCC ON)
+    set(CMAKE_AUTOUIC ON)
 endif()
 
 set(QT_LIBRARIES Qt6::Core Qt6::Bluetooth)

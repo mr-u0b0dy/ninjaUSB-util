@@ -46,17 +46,18 @@ jobs:
     - name: Cache Python packages
       uses: actions/cache@v4
       with:
-        path: ~/.cache/pip
+        path: /tmp/pip-cache
         key: pip-copyright-full-${{ runner.os }}-${{ env.CACHE_VERSION }}
         restore-keys: |
           pip-copyright-full-${{ runner.os }}-
 
     - name: Setup Python environment
       run: |
+        export PIP_CACHE_DIR=/tmp/pip-cache
         python3 -m venv /opt/copyright-env
         . /opt/copyright-env/bin/activate
         pip install --upgrade pip
-        pip install licensecheck scancode-toolkit copyright-header
+        pip install licensecheck scancode-toolkit
 
     - name: Analyze file copyright status
       id: file-analysis

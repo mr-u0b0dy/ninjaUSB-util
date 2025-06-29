@@ -96,7 +96,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-22.04, ubuntu-24.04]
     
     steps:
     - name: Checkout code
@@ -124,28 +124,11 @@ jobs:
           libevdev-dev \
           ccache
 
-    # Install Qt6 with OS-specific approach
+    # Install Qt6 for supported Ubuntu versions  
     - name: Install Qt6 for ${{ matrix.os }}
       run: |
-        if [ "${{ matrix.os }}" = "ubuntu-20.04" ]; then
-          # Ubuntu 20.04: Try universe first, fallback to PPA
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y universe
-          sudo apt-get update -qq
-          
-          if ! sudo apt-get install -y qt6-base-dev qt6-connectivity-dev; then
-            echo "Qt6 not available, trying PPA..."
-            sudo add-apt-repository -y ppa:okirby/qt6-backports || true
-            sudo apt-get update -qq
-            sudo apt-get install -y qt6-base-dev qt6-connectivity-dev || {
-              echo "Qt6 installation failed, falling back to Qt5"
-              sudo apt-get install -y qtbase5-dev qtconnectivity5-dev
-            }
-          fi
-        else
-          # Ubuntu 22.04+ should have Qt6 available
-          sudo apt-get install -y qt6-base-dev qt6-connectivity-dev
-        fi
+        # Ubuntu 22.04+ should have Qt6 available
+        sudo apt-get install -y qt6-base-dev qt6-connectivity-dev
 
     # Cache build per OS and architecture
     - name: Cache build artifacts
