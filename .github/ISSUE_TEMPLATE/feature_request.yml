@@ -1,54 +1,104 @@
----
 name: ✨ Feature Request
-about: Suggest an idea for this project
+description: Suggest an idea for this project
 title: '[FEATURE] '
 labels: ['enhancement', 'needs-triage']
-assignees: ''
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🚀 Feature Request
+        
+        Thank you for suggesting a new feature! Please provide as much detail as possible to help us understand your request.
 
----
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: 🚀 Feature Description
+      description: A clear and concise description of the feature you'd like to see.
+      placeholder: Describe the feature you want...
+    validations:
+      required: true
 
-## 🚀 Feature Description
-A clear and concise description of the feature you'd like to see.
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: 🎯 Problem Statement
+      description: Is your feature request related to a problem? Please describe.
+      placeholder: I'm always frustrated when...
 
-## 🎯 Problem Statement
-Is your feature request related to a problem? Please describe.
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: 💡 Proposed Solution
+      description: Describe the solution you'd like.
+      placeholder: A clear and concise description of what you want to happen...
+    validations:
+      required: true
 
-## 💡 Proposed Solution
-Describe the solution you'd like.
-A clear and concise description of what you want to happen.
+  - type: textarea
+    id: alternative-solutions
+    attributes:
+      label: 🔄 Alternative Solutions
+      description: Describe alternatives you've considered.
+      placeholder: A clear and concise description of any alternative solutions or features you've considered...
 
-## 🔄 Alternative Solutions
-Describe alternatives you've considered.
-A clear and concise description of any alternative solutions or features you've considered.
+  - type: textarea
+    id: mockups-examples
+    attributes:
+      label: 🎨 Mockups/Examples
+      description: If applicable, add mockups, wireframes, or examples to help visualize your feature.
+      placeholder: Drag and drop images here or provide links...
 
-## 🎨 Mockups/Examples
-If applicable, add mockups, wireframes, or examples to help visualize your feature.
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: 📋 Use Cases
+      description: Describe the specific use cases for this feature
+      placeholder: |
+        1. As a [user type], I want [goal] so that [benefit]
+        2. As a [user type], I want [goal] so that [benefit]
+        3. ...
 
-## 📋 Use Cases
-Describe the specific use cases for this feature:
-1. As a [user type], I want [goal] so that [benefit]
-2. ...
+  - type: checkboxes
+    id: benefits
+    attributes:
+      label: 🌟 Benefits
+      description: What are the benefits of implementing this feature?
+      options:
+        - label: Improved user experience
+        - label: Better performance
+        - label: Easier maintenance
+        - label: Enhanced security
+        - label: Better compatibility
+        - label: Other (please specify in additional context)
 
-## 🌟 Benefits
-What are the benefits of implementing this feature?
-- Improved user experience
-- Better performance
-- Easier maintenance
-- etc.
+  - type: textarea
+    id: implementation-considerations
+    attributes:
+      label: 🛠️ Implementation Considerations
+      description: Any technical considerations or constraints
+      placeholder: |
+        - Required dependencies
+        - Breaking changes
+        - Backward compatibility
+        - Performance impact
+        - Security implications
 
-## 🛠️ Implementation Considerations
-Any technical considerations or constraints:
-- Required dependencies
-- Breaking changes
-- Backward compatibility
-- Performance impact
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 📊 Priority
+      description: How important is this feature to you?
+      options:
+        - Nice to have
+        - Important
+        - Critical
+    validations:
+      required: true
 
-## 📊 Priority
-How important is this feature to you?
-- [ ] Nice to have
-- [ ] Important
-- [ ] Critical
-
-## 📋 Additional Context
-Add any other context, screenshots, or examples about the feature request here.
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 📋 Additional Context
+      description: Add any other context, screenshots, or examples about the feature request here.
+      placeholder: Additional information, screenshots, links, etc.
