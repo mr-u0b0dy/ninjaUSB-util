@@ -1,6 +1,24 @@
 /**
  * @file main.cpp
- * @brief Main entry point for ninjaUSB-util - USB keyboard to BLE bridge utility
+ * @brief Main entry point for ni#include <QTimer>
+#include <vector>
+
+#include <libevdev/libevdev.h>
+
+#include "args.hpp"            // Command-line argument parsing
+#include "device_manager.hpp"  // Device enumeration and hot-plug support
+#include "hid_keycodes.hpp"    // HID keyboard mappings and state management
+#include "logger.hpp"         // Logging utilities
+#include "version.hpp"         // Version information
+
+// Qt version compatibility macros for QLowEnergyService state
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    // Qt6 uses RemoteServiceDiscoveringFinished
+    #define QBLE_SERVICE_DISCOVERED QLowEnergyService::RemoteServiceDiscoveringFinished
+#else
+    // Qt5 uses ServiceDiscovered
+    #define QBLE_SERVICE_DISCOVERED QLowEnergyService::ServiceDiscovered
+#endifl - USB keyboard to BLE bridge utility
  * @author Dharun A P
  * @date 2025
  * @copyright Copyright (c) 2025 Dharun A P
@@ -45,6 +63,7 @@
 #include <functional>  // Add missing functional header
 #include <iostream>
 #include <poll.h>
+#include <QtGlobal>  // For Qt version macros
 #include <QBluetoothDeviceDiscoveryAgent>
 #include <QBluetoothDeviceInfo>
 #include <QBluetoothUuid>
@@ -61,8 +80,22 @@
 #include "args.hpp"            // Command-line argument parsing
 #include "device_manager.hpp"  // Device enumeration and hot-plug support
 #include "hid_keycodes.hpp"    // HID keyboard mappings and state management
+#include "inc/logger.hpp"
 #include "logger.hpp"          // Logging utilities
 #include "version.hpp"         // Version information
+
+// Qt version compatibility macros for QLowEnergyService state
+// Both Qt5 and Qt6 use RemoteServiceDiscovered, but this macro allows for
+// easy modification if future versions change the API
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    // Qt6 uses RemoteServiceDiscovered
+    #define QBLE_SERVICE_DISCOVERED QLowEnergyService::RemoteServiceDiscovered
+#elif QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+    // Qt5 also uses RemoteServiceDiscovered
+    #define QBLE_SERVICE_DISCOVERED QLowEnergyService::RemoteServiceDiscovered
+#else
+    #error "Unsupported Qt version - Qt 5.0 or later required"
+#endif
 
 //! @namespace Global application state and configuration
 namespace {
@@ -339,7 +372,8 @@ int main(int argc, char* argv[]) {
 
                 QObject::connect(service, &QLowEnergyService::stateChanged,
                                  [&](QLowEnergyService::ServiceState s) {
-                                     if (s != QLowEnergyService::RemoteServiceDiscovered)
+                                     // Use compatibility macro for Qt version differences
+                                     if (s != QBLE_SERVICE_DISCOVERED)
                                          return;
                                      for (const auto& c : service->characteristics()) {
                                          if (c.properties() &

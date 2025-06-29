@@ -598,26 +598,119 @@ jobs:
           libudev-dev \
           libevdev-dev \
           qt6-base-dev \
-          qt6-bluetooth-dev \
+          libqt6bluetooth6-dev \
           doxygen \
           graphviz \
           curl \
-          ca-certificates
+          ca-certificates \
+        || {
+          echo "Qt6 Bluetooth not available, falling back to Qt5..."
+          apt-get install -y \
+            qt5-default \
+            qtconnectivity5-dev \
+            libqt5bluetooth5-dev
+        }
 
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Detect Qt Version
+      id: qt-version
+      run: |
+        echo "🔍 Detecting available Qt version..."
+        
+        if pkg-config --exists Qt6Core; then
+          QT_VERSION=$(pkg-config --modversion Qt6Core)
+          echo "qt-major=6" >> $GITHUB_OUTPUT
+          echo "qt-version=$QT_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Qt6 detected: $QT_VERSION"
+        elif pkg-config --exists Qt5Core; then
+          QT_VERSION=$(pkg-config --modversion Qt5Core)
+          echo "qt-major=5" >> $GITHUB_OUTPUT
+          echo "qt-version=$QT_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Qt5 detected: $QT_VERSION"
+        else
+          echo "❌ No Qt installation detected"
+          echo "qt-major=none" >> $GITHUB_OUTPUT
+          echo "qt-version=none" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+    - name: Verify Build Environment
+      run: |
+        echo "🔍 Verifying build environment..."
+        
+        echo "📦 Installed Qt packages:"
+        dpkg -l | grep -E "(qt5|qt6)" | head -10
+        
+        echo ""
+        echo "🔧 CMake version:"
+        cmake --version
+        
+        echo ""
+        echo "🔧 Compiler versions:"
+        gcc --version | head -1
+        g++ --version | head -1
+        
+        echo ""
+        echo "📋 pkg-config Qt modules:"
+        pkg-config --list-all | grep -E "(Qt5|Qt6)" | head -10
+        
+        echo ""
+        echo "🔍 Qt installation paths:"
+        if [ "${{ steps.qt-version.outputs.qt-major }}" = "6" ]; then
+          pkg-config --variable=prefix Qt6Core || echo "Qt6Core prefix not found"
+          pkg-config --cflags Qt6Core || echo "Qt6Core cflags not found"
+        else
+          pkg-config --variable=prefix Qt5Core || echo "Qt5Core prefix not found"
+          pkg-config --cflags Qt5Core || echo "Qt5Core cflags not found"
+        fi
 
     - name: Configure CMake for documentation
       run: |
         mkdir build
         cd build
-        cmake .. -DBUILD_DOCS=ON
+        
+        # Use detected Qt version for configuration
+        QT_MAJOR="${{ steps.qt-version.outputs.qt-major }}"
+        QT_VERSION="${{ steps.qt-version.outputs.qt-version }}"
+        
+        echo "🔧 Configuring CMake with Qt${QT_MAJOR} (${QT_VERSION})"
+        
+        if [ "$QT_MAJOR" = "6" ]; then
+          cmake .. -DBUILD_DOCS=ON -DQT_VERSION_MAJOR=6
+        elif [ "$QT_MAJOR" = "5" ]; then
+          cmake .. -DBUILD_DOCS=ON -DQT_VERSION_MAJOR=5
+        else
+          echo "❌ Unsupported Qt version"
+          exit 1
+        fi
 
     - name: Build documentation
       run: |
         cd build
-        echo "🔍 Building Doxygen documentation..."
-        make docs
+        echo "🔍 Building Doxygen documentation with Qt${{ steps.qt-version.outputs.qt-major }}..."
+        
+        # Check if documentation target exists
+        if make help | grep -q "docs"; then
+          echo "📖 Building documentation using 'docs' target..."
+          make docs
+        elif make help | grep -q "doc"; then
+          echo "📖 Building documentation using 'doc' target..."
+          make doc
+        else
+          echo "❌ No documentation target found in Makefile"
+          echo ""
+          echo "Available targets:"
+          make help
+          echo ""
+          echo "CMake configuration may have failed. Checking CMakeCache.txt..."
+          if [ -f "CMakeCache.txt" ]; then
+            echo "Qt-related CMake variables:"
+            grep -i qt CMakeCache.txt || echo "No Qt variables found in CMakeCache.txt"
+          fi
+          exit 1
+        fi
 
     - name: Check documentation completeness
       run: |
@@ -762,6 +855,17 @@ jobs:
     if: always()
 
     steps:
+    - name: Environment Info
+      run: |
+        echo "🔍 Build Environment Information"
+        echo "=============================="
+        echo "🐧 OS: Ubuntu $(lsb_release -rs)"
+        echo "🔧 Runner: ${{ runner.os }}"
+        echo "📅 Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+        echo "🏷️  Ref: ${{ github.ref_name }}"
+        echo "📝 Commit: ${{ github.sha }}"
+        echo ""
+
     - name: Quality Gate Summary
       run: |
         echo "📊 Quality Assurance Summary"
@@ -792,6 +896,8 @@ jobs:
            [ "$LINK_CHECK" = "success" ]; then
           echo "✅ All quality checks passed!"
           echo "🚀 Code is ready for merge!"
+          echo ""
+          echo "ℹ️  Note: This project supports both Qt5 and Qt6 through version detection macros."
         else
           echo "❌ Some quality checks failed!"
           echo ""
@@ -800,9 +906,11 @@ jobs:
           [ "$MARKDOWN_LINT" != "success" ] && echo "  - 📝 Markdown linting issues found"
           [ "$MERMAID_CHECK" != "success" ] && echo "  - 📊 Mermaid diagram issues found"
           [ "$COPYRIGHT_CHECK" != "success" ] && echo "  - ⚖️  Copyright compliance issues found"
-          [ "$DOCS_CHECK" != "success" ] && echo "  - 📚 Documentation issues found"
+          [ "$DOCS_CHECK" != "success" ] && echo "  - 📚 Documentation issues found (Qt version compatibility checked)"
           [ "$LINK_CHECK" != "success" ] && echo "  - 🔗 Link validation failed"
           echo ""
           echo "Please review the failed checks above before merging."
+          echo ""
+          echo "ℹ️  Note: Documentation builds support both Qt5 and Qt6 with automatic detection."
           exit 1
         fi

@@ -115,7 +115,7 @@ jobs:
         # Simplified Qt6 installation with timeout protection
         timeout 240 bash -c '
           echo "Installing Qt6 packages..."
-          apt-get install -y --no-install-recommends qt6-base-dev qt6-bluetooth-dev
+          apt-get install -y --no-install-recommends qt6-base-dev qt6-connectivity-dev
         ' || {
           echo "Qt6 installation timed out or failed, trying Qt5 fallback"
           apt-get install -y --no-install-recommends qtbase5-dev qtconnectivity5-dev || {
@@ -275,7 +275,7 @@ jobs:
           libudev-dev \
           libevdev-dev \
           qt6-base-dev \
-          qt6-bluetooth-dev \
+          qt6-connectivity-dev \
           clang-tidy \
           cppcheck \
           curl \
@@ -357,7 +357,7 @@ jobs:
           libudev-dev \
           libevdev-dev \
           qt6-base-dev \
-          qt6-bluetooth-dev
+          qt6-connectivity-dev
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
