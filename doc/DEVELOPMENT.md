@@ -23,7 +23,8 @@ This guide provides comprehensive information for developers contributing to nin
 
 ## 🔄 CI/CD Integration - Strict Quality Enforcement
 
-Our development workflow is integrated with a comprehensive CI/CD pipeline with **strict quality enforcement**. Before submitting changes:
+Our development workflow is integrated with a comprehensive CI/CD pipeline with
+**strict quality enforcement**. Before submitting changes:
 
 ### ⚠️ Important: Strict Quality Gates
 

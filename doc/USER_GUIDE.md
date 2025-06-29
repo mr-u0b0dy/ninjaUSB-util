@@ -292,7 +292,9 @@ Currently tested on:
 - Ubuntu 22.04 LTS
 - Development testing on various Linux distributions
 
-**Note**: While the utility is designed to work across Linux distributions, comprehensive multi-platform testing is ongoing. Community feedback and testing reports are welcome.
+**Note**: While the utility is designed to work across Linux distributions,
+comprehensive multi-platform testing is ongoing. Community feedback and testing
+reports are welcome.
 
 ## Frequently Asked Questions (FAQ)
 

@@ -4,7 +4,9 @@ This guide covers testing procedures and requirements for ninjaUSB-util.
 
 ## 🔄 CI/CD Pipeline Testing - Strict Enforcement
 
-Our comprehensive CI/CD pipeline automatically runs extensive testing with **strict quality enforcement**. For complete pipeline details, see [PIPELINE.md](PIPELINE.md).
+Our comprehensive CI/CD pipeline automatically runs extensive testing with
+**strict quality enforcement**. For complete pipeline details, see
+[PIPELINE.md](PIPELINE.md).
 
 ### ⚠️ Strict Testing Requirements
 

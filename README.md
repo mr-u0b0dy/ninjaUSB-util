@@ -60,7 +60,7 @@ sudo ./ninja_util
   development workflow
 - **[CI/CD Pipeline](doc/PIPELINE.md)** - Pipeline documentation and
   troubleshooting
-- **[Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md)** - PR guidelines
+- **[Pull Request Template](.github/pull_request_template.md)** - PR guidelines
   and checklist
 
 ## Related Projects

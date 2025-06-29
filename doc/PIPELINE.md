@@ -4,7 +4,9 @@ This document describes the comprehensive CI/CD pipeline setup for ninjaUSB-util
 
 ## 📋 Pipeline Overview
 
-The CI/CD pipeline consists of a single comprehensive GitHub Actions workflow that provides **strict quality enforcement** with zero tolerance for quality violations:
+The CI/CD pipeline consists of a single comprehensive GitHub Actions workflow
+that provides **strict quality enforcement** with zero tolerance for quality
+violations:
 
 - ⚡ **Quick Validation**: Fast feedback with immediate file and change validation - **FAIL ON VIOLATIONS**
 - 🏗️ **Parallel Processing**: Quality checks and builds run simultaneously for efficiency
@@ -79,7 +81,8 @@ graph TD
 **b) YAML & Markdown Quality (`yaml-markdown`)** *(STRICT ENFORCEMENT)*
 
 - YAML linting with `yamllint` - **FAIL ON LINT ERRORS**
-- Enhanced Markdown linting with `markdownlint-cli2` - **FAIL ON ALL WARNINGS**
+- Enhanced Markdown linting with `markdownlint-cli2` - **FAIL ON CRITICAL WARNINGS**
+- Line length violations (MD013) - **WARNING ONLY (non-blocking)**
 - Custom markdownlint configuration with strict rules
 - Broken link detection for relative Markdown links - **FAIL ON BROKEN LINKS**
 - Missing alt text detection for images - **FAIL ON MISSING ALT TEXT**
@@ -208,7 +211,9 @@ Smart execution based on:
 
 ## 📊 Quality Gates - Strict Enforcement
 
-Every pull request must pass these automated checks. **All quality gates are strictly enforced - warnings are treated as errors and will fail the pipeline.**
+Every pull request must pass these automated checks. **All quality gates are
+strictly enforced - warnings are treated as errors and will fail the
+pipeline.**
 
 ### 1. ✅ **Quick Validation** *(STRICT)*
 

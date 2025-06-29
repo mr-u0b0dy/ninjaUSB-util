@@ -39,7 +39,9 @@ ctest --output-on-failure
 
 ## 🔍 CI/CD Pipeline and Quality Checks - Strict Enforcement
 
-Our comprehensive CI/CD pipeline ensures code quality and maintainability with **strict enforcement** - all warnings are treated as errors. For complete details, see [PIPELINE.md](PIPELINE.md).
+Our comprehensive CI/CD pipeline ensures code quality and maintainability with
+**strict enforcement** - all warnings are treated as errors. For complete
+details, see [PIPELINE.md](PIPELINE.md).
 
 ### Pipeline Overview
 
@@ -109,10 +111,12 @@ Our pipeline includes enhanced markdown validation:
 The project enforces specific encoding standards:
 
 - **Source Files** (`.cpp`, `.hpp`): Must be ASCII or UTF-8 encoded
-- **Documentation Files** (`.md`): UTF-8 recommended but not enforced by pipeline
+- **Documentation Files** (`.md`): UTF-8 recommended but not enforced by
+  pipeline
 - **Configuration Files** (`.yml`, `.yaml`): UTF-8 recommended
 
-**Note**: The pipeline only validates encoding for source files to ensure maximum compatibility across different systems and compilers.
+**Note**: The pipeline only validates encoding for source files to ensure
+maximum compatibility across different systems and compilers.
 
 ### Commit Message Guidelines
 

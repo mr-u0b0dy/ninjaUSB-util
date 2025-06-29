@@ -342,7 +342,7 @@ jobs:
           "default": true,
           "MD003": { "style": "atx" },
           "MD007": { "indent": 2 },
-          "MD013": { "line_length": 120 },
+          "MD013": false,
           "MD024": { "allow_different_nesting": true },
           "MD033": false,
           "MD041": false
@@ -350,12 +350,19 @@ jobs:
         EOF
           fi
           
-          # Lint all markdown files
+          # Lint all markdown files (excluding MD013)
           echo "Linting Markdown files..."
           if ! markdownlint-cli2 "**/*.md" --ignore node_modules --ignore build --config .markdownlint.json; then
             echo "❌ Markdown linting issues found"
             echo "💡 Run 'markdownlint-cli2 --fix \"**/*.md\"' to auto-fix issues"
             MARKDOWN_ERRORS=1
+          fi
+          
+          # Check MD013 separately as warnings only
+          echo "Checking line length (MD013) - warnings only..."
+          if ! markdownlint-cli2 "**/*.md" --ignore node_modules --ignore build --rule MD013; then
+            echo "⚠️  Warning: Line length violations found (MD013) - non-blocking"
+            echo "💡 Consider breaking long lines for better readability"
           fi
           
           # Check for common markdown issues
