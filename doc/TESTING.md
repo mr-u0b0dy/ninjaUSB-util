@@ -2,6 +2,29 @@
 
 This guide covers testing procedures and requirements for ninjaUSB-util.
 
+## 🔄 CI/CD Pipeline Testing - Strict Enforcement
+
+Our comprehensive CI/CD pipeline automatically runs extensive testing with **strict quality enforcement**. For complete pipeline details, see [PIPELINE.md](PIPELINE.md).
+
+### ⚠️ Strict Testing Requirements
+
+- **All tests must pass** - no test failures are tolerated
+- **Zero memory leaks** - Valgrind validation is strictly enforced
+- **100% build success** - all platforms must compile successfully
+- **Complete coverage** - all quality gates must pass
+
+### Automated Testing in CI
+
+The pipeline includes strict validation for:
+
+- **Quick Validation**: File encoding and basic structure validation - **FAIL ON VIOLATIONS**
+- **Quality Compliance**: License, code quality, and documentation checks - **FAIL ON WARNINGS**
+- **Build Matrix**: Multi-platform builds (Ubuntu 22.04, 24.04) - **FAIL ON BUILD ERRORS**
+- **Unit Tests**: Comprehensive test execution with CTest - **FAIL ON TEST FAILURES**
+- **Static Analysis**: cppcheck and clang-tidy analysis - **FAIL ON CODE ISSUES**
+- **Memory Testing**: Valgrind leak detection - **FAIL ON MEMORY LEAKS**
+- **Performance Testing**: Memory and timing validation (on `[perf]` commits) - **FAIL ON REGRESSIONS**
+
 ## Unit Tests
 
 The project includes unit tests for core components:

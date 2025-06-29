@@ -27,7 +27,7 @@ env:
 jobs:
   # Job 1: Quick validation checks (fast feedback)
   quick-checks:
-    name: Quick Validation
+    name: Quick Checks
     runs-on: ubuntu-latest
     outputs:
       should-build: ${{ steps.changes.outputs.build-needed }}
@@ -86,160 +86,15 @@ jobs:
           fi
         done
 
-  # Job 2: Comprehensive build and test matrix
-  build-matrix:
-    name: Build & Test
-    needs: quick-checks
-    if: needs.quick-checks.outputs.should-build == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        ubuntu-version: [22.04, 24.04]
-        build-type: [Release]
-        include:
-          - ubuntu-version: 24.04
-            build-type: Debug
-            enable-tests: true
-            enable-docs: true
-          - ubuntu-version: 22.04
-            qt-version: "6.4.*"
-          - ubuntu-version: 24.04
-            qt-version: "6.6.*"
-
-    container:
-      image: ubuntu:${{ matrix.ubuntu-version }}
-
-    steps:
-    - name: Cache APT packages
-      uses: actions/cache@v4
-      with:
-        path: /var/cache/apt
-        key: apt-${{ matrix.ubuntu-version }}-${{ env.CACHE_VERSION }}-${{ hashFiles('.github/workflows/ci.yml') }}
-        restore-keys: |
-          apt-${{ matrix.ubuntu-version }}-${{ env.CACHE_VERSION }}-
-          apt-${{ matrix.ubuntu-version }}-
-
-    - name: Install system dependencies
-      run: |
-        apt-get update -qq
-        apt-get install -y --no-install-recommends \
-          build-essential \
-          cmake \
-          git \
-          pkg-config \
-          curl \
-          ca-certificates \
-          software-properties-common \
-          libudev-dev \
-          libevdev-dev \
-          qt6-base-dev \
-          qt6-connectivity-dev \
-          ccache
-
-    - name: Install documentation tools
-      if: matrix.enable-docs == true
-      run: |
-        apt-get install -y --no-install-recommends \
-          doxygen \
-          graphviz
-
-    - name: Install testing tools
-      if: matrix.enable-tests == true
-      run: |
-        apt-get install -y --no-install-recommends \
-          valgrind \
-          cppcheck \
-          clang-tidy
-
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Cache build artifacts
-      uses: actions/cache@v4
-      with:
-        path: |
-          build/
-          ~/.ccache
-        key: build-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}-${{ hashFiles('src/**', 'CMakeLists.txt', '.github/workflows/ci.yml') }}
-        restore-keys: |
-          build-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}-
-          build-${{ matrix.ubuntu-version }}-
-
-    - name: Configure CMake
-      run: |
-        mkdir -p build && cd build
-        ENABLE_TESTS=${{ (matrix.enable-tests == true && github.event.inputs.skip_tests != 'true') && 'ON' || 'OFF' }}
-        ENABLE_DOCS=${{ matrix.enable-docs == true && 'ON' || 'OFF' }}
-        
-        cmake .. \
-          -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
-          -DBUILD_TESTS=${ENABLE_TESTS} \
-          -DBUILD_DOCS=${ENABLE_DOCS} \
-          -DCMAKE_VERBOSE_MAKEFILE=ON \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
-    - name: Build
-      run: |
-        cd build
-        ccache --zero-stats || true
-        make -j$(nproc) VERBOSE=1
-        ccache --show-stats || true
-
-    - name: Run tests
-      if: matrix.enable-tests == true && github.event.inputs.skip_tests != 'true'
-      run: |
-        cd build
-        ctest --output-on-failure --verbose
-
-    - name: Static analysis
-      if: matrix.enable-tests == true
-      run: |
-        cd build
-        echo "Running cppcheck..."
-        cppcheck --enable=all --std=c++17 --verbose \
-          --suppress=missingIncludeSystem \
-          --suppress=unusedFunction \
-          ../src/ || true
-        
-        echo "Running clang-tidy..."
-        find ../src -name "*.cpp" | head -5 | xargs -I {} clang-tidy {} -- -I../src/inc || true
-
-    - name: Build documentation
-      if: matrix.enable-docs == true
-      run: |
-        cd build
-        make docs
-
-    - name: Upload build artifacts
-      if: matrix.build-type == 'Release'
-      uses: actions/upload-artifact@v4
-      with:
-        name: ninja_util-ubuntu-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}
-        path: |
-          build/ninja_util
-          VERSION
-        retention-days: 30
-
-    - name: Upload documentation
-      if: matrix.enable-docs == true
-      uses: actions/upload-artifact@v4
-      with:
-        name: documentation-${{ matrix.ubuntu-version }}
-        path: build/doc/
-        retention-days: 30
-
-  # Job 3: Quality and compliance checks (runs in parallel)
+  # Job 2: Quality and compliance checks (runs in parallel with build)
   quality-compliance:
     name: Quality & Compliance (${{ matrix.name }})
+    needs: quick-checks
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        check-type: [license-spdx, yaml-markdown, cpp-analysis, file-validation]
+        check-type: [license-spdx, yaml-markdown, cpp-analysis, file-validation, docs-validation]
         include:
           - check-type: license-spdx
             name: "License & SPDX"
@@ -253,6 +108,9 @@ jobs:
           - check-type: file-validation
             name: "File Validation"
             tools: "file jq"
+          - check-type: docs-validation
+            name: "Documentation"
+            tools: "doxygen graphviz"
     container:
       image: ubuntu:24.04
 
@@ -296,6 +154,7 @@ jobs:
       if: matrix.check-type == 'license-spdx'
       run: |
         echo "🔍 Checking SPDX identifiers..."
+        LICENSE_ERRORS=0
         
         # Check for SPDX identifiers in source files
         echo "Checking SPDX identifiers..."
@@ -314,31 +173,44 @@ jobs:
           if grep -q "SPDX-License-Identifier\|SPDX-FileCopyrightText" CMakeLists.txt; then
             echo "✅ SPDX identifier found in CMakeLists.txt"
           else
-            echo "⚠️  Missing SPDX identifier in CMakeLists.txt"
+            echo "❌ Missing SPDX identifier in CMakeLists.txt"
+            MISSING_SPDX=1
           fi
         fi
         
         # Use licensecheck if available
         if command -v licensecheck >/dev/null 2>&1; then
           echo "Running licensecheck on source files..."
-          find src tests -name "*.cpp" -o -name "*.hpp" | head -5 | \
-            xargs licensecheck 2>/dev/null || echo "licensecheck completed with warnings"
+          if ! find src tests -name "*.cpp" -o -name "*.hpp" | head -5 | xargs licensecheck 2>/dev/null; then
+            echo "❌ licensecheck found issues"
+            LICENSE_ERRORS=1
+          else
+            echo "✅ licensecheck passed"
+          fi
         fi
         
         if [ $MISSING_SPDX -eq 1 ]; then
+          echo "❌ SPDX compliance failed - missing identifiers"
           echo "💡 Add SPDX identifiers to source files"
           echo "Example:"
           echo "// SPDX-License-Identifier: Apache-2.0"
           echo "// SPDX-FileCopyrightText: $(date +%Y) Your Name"
-          # Don't fail for now, just warn
+          LICENSE_ERRORS=1
         else
           echo "✅ All source files have SPDX identifiers"
+        fi
+        
+        # Fail if license errors found
+        if [ $LICENSE_ERRORS -eq 1 ]; then
+          echo "❌ License compliance validation failed"
+          exit 1
         fi
 
     - name: License file and header validation
       if: matrix.check-type == 'license-spdx'
       run: |
         echo "🔍 Comprehensive license validation..."
+        LICENSE_HEADER_ERRORS=0
         
         # Check for LICENSE file existence and content
         if [ ! -f LICENSE ]; then
@@ -359,13 +231,15 @@ jobs:
             LICENSE_TYPE="GPL"
             echo "✅ GPL License detected"
           else
-            echo "⚠️  License type not clearly identified"
+            echo "❌ License type not clearly identified"
+            LICENSE_HEADER_ERRORS=1
           fi
           
           # Validate LICENSE file is not empty and has reasonable content
           LICENSE_SIZE=$(wc -c < LICENSE)
           if [ "$LICENSE_SIZE" -lt 100 ]; then
-            echo "⚠️  LICENSE file seems too short ($LICENSE_SIZE characters)"
+            echo "❌ LICENSE file seems too short ($LICENSE_SIZE characters)"
+            LICENSE_HEADER_ERRORS=1
           else
             echo "✅ LICENSE file has substantial content ($LICENSE_SIZE characters)"
           fi
@@ -376,7 +250,8 @@ jobs:
           if grep -q -i license README.md; then
             echo "✅ License mentioned in README.md"
           else
-            echo "⚠️  License not mentioned in README.md"
+            echo "❌ License not mentioned in README.md"
+            LICENSE_HEADER_ERRORS=1
           fi
         fi
         
@@ -393,22 +268,35 @@ jobs:
         done
         
         if [ $MISSING_HEADERS -eq 1 ]; then
+          echo "❌ License headers validation failed"
           echo "💡 Add license headers to source files"
           echo "Example header:"
           echo "// SPDX-License-Identifier: Apache-2.0"
           echo "// SPDX-FileCopyrightText: $(date +%Y) Your Name"
           echo "//"
           echo "// Licensed under the Apache License, Version 2.0..."
+          LICENSE_HEADER_ERRORS=1
+        fi
+        
+        # Fail if license header errors found
+        if [ $LICENSE_HEADER_ERRORS -eq 1 ]; then
+          echo "❌ License validation failed"
+          exit 1
+        else
+          echo "✅ License validation passed"
         fi
 
     - name: YAML linting
       if: matrix.check-type == 'yaml-markdown'
       run: |
         echo "🔍 Linting YAML files..."
+        YAML_ERRORS=0
+        
         if command -v yamllint >/dev/null 2>&1; then
-          yamllint .github/workflows/ || {
-            echo "⚠️  YAML linting issues found"
-          }
+          if ! yamllint .github/workflows/; then
+            echo "❌ YAML linting issues found"
+            YAML_ERRORS=1
+          fi
         else
           echo "ℹ️  yamllint not available, skipping"
         fi
@@ -417,18 +305,105 @@ jobs:
         if command -v yaml-lint >/dev/null 2>&1; then
           find . -name "*.yml" -o -name "*.yaml" | while read file; do
             echo "Checking: $file"
-            yaml-lint "$file" || echo "⚠️  Issues in $file"
+            if ! yaml-lint "$file"; then
+              echo "❌ YAML validation failed for $file"
+              echo "YAML_LINT_FAILED=1" >> /tmp/yaml_errors
+            fi
           done
+          
+          # Check for yaml-lint failures
+          if [ -f /tmp/yaml_errors ] && grep -q "YAML_LINT_FAILED=1" /tmp/yaml_errors; then
+            YAML_ERRORS=1
+          fi
+        fi
+        
+        # Fail if YAML errors found
+        if [ $YAML_ERRORS -eq 1 ]; then
+          echo "❌ YAML validation failed"
+          exit 1
+        else
+          echo "✅ YAML validation passed"
         fi
 
     - name: Markdown linting with markdownlint-cli2
       if: matrix.check-type == 'yaml-markdown'
       run: |
         echo "🔍 Linting Markdown files with markdownlint-cli2..."
+        MARKDOWN_ERRORS=0
+        
         if command -v markdownlint-cli2 >/dev/null 2>&1; then
-          markdownlint-cli2 "**/*.md" --ignore node_modules --ignore build || {
-            echo "⚠️  Markdown linting issues found (non-blocking)"
-          }
+          # Create markdownlint config if it doesn't exist
+          if [ ! -f ".markdownlint.json" ]; then
+            echo "Creating default markdownlint configuration..."
+            cat > .markdownlint.json << 'EOF'
+        {
+          "default": true,
+          "MD003": { "style": "atx" },
+          "MD007": { "indent": 2 },
+          "MD013": { "line_length": 120 },
+          "MD024": { "allow_different_nesting": true },
+          "MD033": false,
+          "MD041": false
+        }
+        EOF
+          fi
+          
+          # Lint all markdown files
+          echo "Linting Markdown files..."
+          if ! markdownlint-cli2 "**/*.md" --ignore node_modules --ignore build --config .markdownlint.json; then
+            echo "❌ Markdown linting issues found"
+            echo "💡 Run 'markdownlint-cli2 --fix \"**/*.md\"' to auto-fix issues"
+            MARKDOWN_ERRORS=1
+          fi
+          
+          # Check for common markdown issues
+          echo "Checking for common Markdown issues..."
+          find . -name "*.md" -not -path "./build/*" -not -path "./.git/*" | while read file; do
+            # Check for broken relative links
+            grep -n '\]\([^)]*\.md\)' "$file" | while IFS=: read line_num link; do
+              link_path=$(echo "$link" | sed -n 's/.*\](\([^)]*\)).*/\1/p')
+              if [ -n "$link_path" ] && [ ! -f "$(dirname "$file")/$link_path" ] && [ ! -f "$link_path" ]; then
+                echo "❌ Broken link in $file:$line_num -> $link_path"
+                echo "BROKEN_LINK_FOUND=1" >> /tmp/markdown_errors
+              fi
+            done
+            
+            # Check for missing alt text in images
+            if grep -q '!\[\](' "$file"; then
+              echo "❌ Images without alt text found in: $file"
+              echo "MISSING_ALT_TEXT=1" >> /tmp/markdown_errors
+            fi
+            
+            # Check for trailing whitespace
+            if grep -q ' $' "$file"; then
+              echo "❌ Trailing whitespace found in: $file"
+              echo "TRAILING_WHITESPACE=1" >> /tmp/markdown_errors
+            fi
+          done
+          
+          # Check if any critical markdown errors were found
+          if [ -f /tmp/markdown_errors ]; then
+            if grep -q "BROKEN_LINK_FOUND=1" /tmp/markdown_errors; then
+              echo "💥 CRITICAL: Broken markdown links detected - failing pipeline"
+              MARKDOWN_ERRORS=1
+            fi
+            if grep -q "MISSING_ALT_TEXT=1" /tmp/markdown_errors; then
+              echo "⚠️  Warning: Missing alt text detected (non-blocking)"
+            fi
+            if grep -q "TRAILING_WHITESPACE=1" /tmp/markdown_errors; then
+              echo "⚠️  Warning: Trailing whitespace detected (non-blocking)"
+            fi
+          fi
+          
+          # Fail if critical errors found
+          if [ $MARKDOWN_ERRORS -eq 1 ]; then
+            echo "❌ Markdown validation failed due to critical issues"
+            echo "💡 Fix broken links and run 'markdownlint-cli2 --fix \"**/*.md\"' to auto-fix other issues"
+            exit 1
+          else
+            echo "✅ Markdown validation passed"
+          fi
+          
         else
           echo "ℹ️  markdownlint-cli2 not available, skipping"
         fi
@@ -437,6 +412,8 @@ jobs:
       if: matrix.check-type == 'yaml-markdown'
       run: |
         echo "🔍 Checking Mermaid diagrams..."
+        MERMAID_ERRORS=0
+        
         if command -v mmdc >/dev/null 2>&1; then
           # Find files containing mermaid diagrams
           MERMAID_FILES=$(grep -r '\`\`\`mermaid' . --include="*.md" --exclude-dir=build --exclude-dir=node_modules | cut -d: -f1 | sort -u || true)
@@ -451,13 +428,22 @@ jobs:
               # This is a basic check - extract mermaid blocks and validate syntax
               awk '/\`\`\`mermaid/,/\`\`\`/' "$file" | grep -v '\`\`\`' > /tmp/mermaid_temp.mmd 2>/dev/null || true
               if [ -s /tmp/mermaid_temp.mmd ]; then
-                mmdc -i /tmp/mermaid_temp.mmd -o /tmp/mermaid_test.png 2>/dev/null && \
-                  echo "✅ Mermaid diagram valid in $file" || \
-                  echo "⚠️  Mermaid diagram issues in $file"
+                if ! mmdc -i /tmp/mermaid_temp.mmd -o /tmp/mermaid_test.png 2>/dev/null; then
+                  echo "❌ Mermaid diagram validation failed in $file"
+                  MERMAID_ERRORS=1
+                else
+                  echo "✅ Mermaid diagram valid in $file"
+                fi
               fi
             done
           else
             echo "ℹ️  No Mermaid diagrams found"
+          fi
+          
+          # Fail if Mermaid errors found
+          if [ $MERMAID_ERRORS -eq 1 ]; then
+            echo "❌ Mermaid diagram validation failed"
+            exit 1
           fi
         else
           echo "ℹ️  Mermaid CLI not available, skipping diagram validation"
@@ -482,8 +468,11 @@ jobs:
           done
           
           if [ $FORMAT_ISSUES -eq 1 ]; then
+            echo "❌ C++ formatting validation failed"
             echo "💡 Run 'find src tests -name \"*.cpp\" -o -name \"*.hpp\" | xargs clang-format -i' to fix formatting"
-            # Don't fail, just warn
+            exit 1
+          else
+            echo "✅ All C++ files properly formatted"
           fi
         else
           echo "ℹ️  No C++ files found"
@@ -557,6 +546,7 @@ jobs:
       if: matrix.check-type == 'file-validation'
       run: |
         echo "🔍 Running file validation and encoding checks..."
+        FILE_ERRORS=0
         
         # Check file encodings
         echo "Checking file encodings..."
@@ -565,7 +555,8 @@ jobs:
           if file "$file" | grep -q "UTF-8"; then
             echo "✅ UTF-8 encoding: $file"
           else
-            echo "⚠️  Non-UTF-8 encoding: $file"
+            echo "❌ Non-UTF-8 encoding: $file"
+            echo "ENCODING_ERROR=1" >> /tmp/file_errors
           fi
         done
         
@@ -574,7 +565,8 @@ jobs:
         find . -type f -executable \
           -not -path "./.git/*" -not -path "./build/*" \
           -not -name "*.sh" -not -name "ninja_util" | while read file; do
-          echo "⚠️  Unexpected executable: $file"
+          echo "❌ Unexpected executable: $file"
+          echo "EXECUTABLE_ERROR=1" >> /tmp/file_errors
         done || echo "✅ No unexpected executable files found"
         
         # Check file sizes
@@ -582,8 +574,129 @@ jobs:
         find . -type f -size +1M \
           -not -path "./.git/*" -not -path "./build/*" | while read file; do
           size=$(du -h "$file" | cut -f1)
-          echo "⚠️  Large file detected: $file ($size)"
+          echo "❌ Large file detected: $file ($size)"
+          echo "LARGE_FILE_ERROR=1" >> /tmp/file_errors
         done || echo "✅ No large files found"
+        
+        # Check for file validation errors
+        if [ -f /tmp/file_errors ]; then
+          if grep -q "ENCODING_ERROR=1\|EXECUTABLE_ERROR=1\|LARGE_FILE_ERROR=1" /tmp/file_errors; then
+            echo "❌ File validation failed due to critical issues"
+            FILE_ERRORS=1
+          fi
+        fi
+        
+        # Fail if file validation errors found
+        if [ $FILE_ERRORS -eq 1 ]; then
+          echo "❌ File validation failed"
+          exit 1
+        else
+          echo "✅ File validation passed"
+        fi
+
+    - name: Documentation validation and coverage
+      if: matrix.check-type == 'docs-validation'
+      run: |
+        echo "📚 Running documentation validation..."
+        DOC_ERRORS=0
+        
+        # Check for README files
+        if [ -f README.md ]; then
+          echo "✅ README.md found"
+          
+          # Check README content quality
+          README_SIZE=$(wc -w < README.md)
+          if [ "$README_SIZE" -lt 50 ]; then
+            echo "❌ README.md seems too short ($README_SIZE words)"
+            DOC_ERRORS=1
+          else
+            echo "✅ README.md has good content ($README_SIZE words)"
+          fi
+          
+          # Check for essential sections
+          for section in "installation" "usage" "build" "license"; do
+            if grep -qi "$section" README.md; then
+              echo "✅ $section section found in README"
+            else
+              echo "❌ $section section missing from README"
+              DOC_ERRORS=1
+            fi
+          done
+        else
+          echo "❌ README.md not found"
+          DOC_ERRORS=1
+        fi
+        
+        # Check for documentation directory
+        if [ -d "doc/" ]; then
+          echo "✅ Documentation directory found"
+          find doc/ -name "*.md" | head -5 | while read file; do
+            echo "  📄 Found: $file"
+          done
+        else
+          echo "ℹ️  No doc/ directory found"
+        fi
+        
+        # Check for inline documentation in source files
+        if find src -name "*.cpp" -o -name "*.hpp" 2>/dev/null | grep -q .; then
+          echo "Checking for inline documentation..."
+          DOCUMENTED_FILES=0
+          TOTAL_FILES=0
+          
+          for file in $(find src -name "*.hpp" 2>/dev/null); do
+            TOTAL_FILES=$((TOTAL_FILES + 1))
+            if grep -q "/\*\*\|///" "$file"; then
+              DOCUMENTED_FILES=$((DOCUMENTED_FILES + 1))
+              echo "✅ Documentation found in: $file"
+            else
+              echo "⚠️  No documentation in: $file"
+            fi
+          done
+          
+          if [ "$TOTAL_FILES" -gt 0 ]; then
+            COVERAGE=$((DOCUMENTED_FILES * 100 / TOTAL_FILES))
+            echo "📊 Documentation coverage: $COVERAGE% ($DOCUMENTED_FILES/$TOTAL_FILES files)"
+            
+            if [ "$COVERAGE" -ge 80 ]; then
+              echo "✅ Good documentation coverage"
+            elif [ "$COVERAGE" -ge 50 ]; then
+              echo "⚠️  Moderate documentation coverage"
+            else
+              echo "❌ Low documentation coverage (<50%)"
+              DOC_ERRORS=1
+            fi
+          fi
+        fi
+        
+        # Check if Doxygen configuration exists
+        if [ -f "Doxyfile" ] || [ -f "docs/Doxyfile" ] || [ -f "doc/Doxyfile" ]; then
+          echo "✅ Doxygen configuration found"
+          
+          # Test Doxygen build if possible
+          if command -v doxygen >/dev/null 2>&1; then
+            echo "Testing Doxygen documentation build..."
+            mkdir -p /tmp/doc-test
+            if doxygen Doxyfile >/tmp/doc-test/doxygen.log 2>&1 || \
+               doxygen docs/Doxyfile >/tmp/doc-test/doxygen.log 2>&1 || \
+               doxygen doc/Doxyfile >/tmp/doc-test/doxygen.log 2>&1; then
+              echo "✅ Doxygen build successful"
+            else
+              echo "❌ Doxygen build failed"
+              tail -10 /tmp/doc-test/doxygen.log 2>/dev/null || echo "No log available"
+              DOC_ERRORS=1
+            fi
+          fi
+        else
+          echo "ℹ️  No Doxygen configuration found"
+        fi
+        
+        # Fail if critical documentation errors found
+        if [ $DOC_ERRORS -eq 1 ]; then
+          echo "❌ Documentation validation failed due to critical issues"
+          exit 1
+        else
+          echo "✅ Documentation validation passed"
+        fi
 
     - name: Generate quality summary
       run: |
@@ -607,11 +720,185 @@ jobs:
           "file-validation")
             echo "✅ File validation and encoding checks completed"
             ;;
+          "docs-validation")
+            echo "✅ Documentation validation and coverage checks completed"
+            ;;
         esac
+
+  # Job 3: Comprehensive build and test matrix (runs in parallel with quality)
+  build-matrix:
+    name: Build & Test
+    needs: quick-checks
+    if: needs.quick-checks.outputs.should-build == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu-version: [22.04, 24.04]
+        build-type: [Release]
+        include:
+          - ubuntu-version: 24.04
+            build-type: Debug
+            enable-tests: true
+            enable-docs: true
+          - ubuntu-version: 22.04
+            qt-version: "6.4.*"
+          - ubuntu-version: 24.04
+            qt-version: "6.6.*"
+
+    container:
+      image: ubuntu:${{ matrix.ubuntu-version }}
+
+    steps:
+    - name: Cache APT packages
+      uses: actions/cache@v4
+      with:
+        path: /var/cache/apt
+        key: apt-${{ matrix.ubuntu-version }}-${{ env.CACHE_VERSION }}-${{ hashFiles('.github/workflows/ci.yml') }}
+        restore-keys: |
+          apt-${{ matrix.ubuntu-version }}-${{ env.CACHE_VERSION }}-
+          apt-${{ matrix.ubuntu-version }}-
+
+    - name: Install system dependencies
+      run: |
+        apt-get update -qq
+        apt-get install -y --no-install-recommends \
+          build-essential \
+          cmake \
+          git \
+          pkg-config \
+          curl \
+          ca-certificates \
+          software-properties-common \
+          libudev-dev \
+          libevdev-dev \
+          qt6-base-dev \
+          qt6-connectivity-dev \
+          ccache
+
+    - name: Install documentation tools
+      if: matrix.enable-docs == true
+      run: |
+        echo "📚 Installing documentation tools..."
+        apt-get install -y --no-install-recommends \
+          doxygen \
+          graphviz \
+          plantuml \
+          texlive-latex-base \
+          texlive-fonts-recommended \
+          texlive-fonts-extra \
+          texlive-latex-extra
+        
+        # Verify installation
+        doxygen --version
+        dot -V || echo "⚠️  Graphviz not properly installed"
+
+    - name: Install testing tools
+      if: matrix.enable-tests == true
+      run: |
+        apt-get install -y --no-install-recommends \
+          valgrind \
+          cppcheck \
+          clang-tidy
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Cache build artifacts
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/
+          ~/.ccache
+        key: build-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}-${{ hashFiles('src/**', 'CMakeLists.txt', '.github/workflows/ci.yml') }}
+        restore-keys: |
+          build-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}-
+          build-${{ matrix.ubuntu-version }}-
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build && cd build
+        ENABLE_TESTS=${{ (matrix.enable-tests == true && github.event.inputs.skip_tests != 'true') && 'ON' || 'OFF' }}
+        ENABLE_DOCS=${{ matrix.enable-docs == true && 'ON' || 'OFF' }}
+        
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
+          -DBUILD_TESTS=${ENABLE_TESTS} \
+          -DBUILD_DOCS=${ENABLE_DOCS} \
+          -DCMAKE_VERBOSE_MAKEFILE=ON \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+    - name: Build
+      run: |
+        cd build
+        ccache --zero-stats || true
+        make -j$(nproc) VERBOSE=1
+        ccache --show-stats || true
+
+    - name: Run tests
+      if: matrix.enable-tests == true && github.event.inputs.skip_tests != 'true'
+      run: |
+        cd build
+        ctest --output-on-failure --verbose
+
+    - name: Static analysis
+      if: matrix.enable-tests == true
+      run: |
+        cd build
+        echo "Running cppcheck..."
+        cppcheck --enable=all --std=c++17 --verbose \
+          --suppress=missingIncludeSystem \
+          --suppress=unusedFunction \
+          ../src/ || true
+        
+        echo "Running clang-tidy..."
+        find ../src -name "*.cpp" | head -5 | xargs -I {} clang-tidy {} -- -I../src/inc || true
+
+    - name: Build documentation
+      if: matrix.enable-docs == true
+      run: |
+        cd build
+        echo "🔨 Building documentation..."
+        make docs || echo "⚠️  Documentation build failed"
+        
+        # Verify documentation was generated
+        if [ -d "doc/" ]; then
+          echo "✅ Documentation generated successfully"
+          find doc/ -name "*.html" | head -5 | while read file; do
+            echo "  📄 Generated: $file"
+          done
+        else
+          echo "❌ No documentation output found"
+        fi
+
+    - name: Upload build artifacts
+      if: matrix.build-type == 'Release'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ninja_util-ubuntu-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}
+        path: |
+          build/ninja_util
+          VERSION
+        retention-days: 30
+
+    - name: Upload documentation
+      if: matrix.enable-docs == true
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation-${{ matrix.ubuntu-version }}
+        path: |
+          build/doc/
+          README.md
+          doc/
+        retention-days: 30
+        if-no-files-found: warn
 
   # Job 4: Performance testing (optional, on specific triggers)
   performance-test:
-    name: Performance Test
+    name: Performance Tests
     runs-on: ubuntu-latest
     if: contains(github.event.head_commit.message, '[perf]')
     container:
@@ -670,7 +957,7 @@ jobs:
 
   # Job 6: Release preparation (only on tag pushes)
   release:
-    name: Prepare Release
+    name: Release
     runs-on: ubuntu-latest
     needs: [build-matrix, quality-compliance]
     if: startsWith(github.ref, 'refs/tags/v')
@@ -691,14 +978,25 @@ jobs:
         # Copy binaries
         find release-artifacts -name "ninja_util" -exec cp {} release/ \;
         
-        # Copy documentation
+        # Copy documentation and project docs
         if [ -d "release-artifacts/documentation-24.04" ]; then
+          echo "📚 Including documentation in release..."
           cp -r release-artifacts/documentation-24.04 release/docs
+          echo "✅ Documentation included"
+        else
+          echo "⚠️  No documentation found for release"
         fi
+        
+        # Include project documentation
+        cp README.md release/ 2>/dev/null || echo "⚠️  README.md not found"
+        cp LICENSE release/ 2>/dev/null || echo "⚠️  LICENSE not found"
+        cp VERSION release/ 2>/dev/null || echo "⚠️  VERSION not found"
         
         # Create release package
         cd release
-        tar -czf ninja_util-$(cat ../VERSION).tar.gz *
+        echo "📦 Creating release package..."
+        tar -czf ninja_util-$(cat ../VERSION 2>/dev/null || echo "unknown").tar.gz *
+        echo "✅ Release package created: ninja_util-$(cat ../VERSION 2>/dev/null || echo "unknown").tar.gz"
 
     - name: Upload release assets
       uses: actions/upload-artifact@v4

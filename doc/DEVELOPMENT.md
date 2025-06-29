@@ -2,9 +2,79 @@
 
 This guide provides comprehensive information for developers contributing to ninjaUSB-util.
 
+## 🚀 Quick Development Setup
+
+1. **Install dependencies** (see Installation section in README)
+2. **Build the project**:
+
+   ```bash
+   mkdir build && cd build
+   cmake .. -DBUILD_TESTS=ON -DBUILD_DOCS=ON
+   make -j$(nproc)
+   ```
+
+3. **Run tests** to verify everything works:
+
+   ```bash
+   ctest --output-on-failure
+   ```
+
+4. **Test your changes** against CI quality gates (see [PIPELINE.md](PIPELINE.md))
+
+## 🔄 CI/CD Integration - Strict Quality Enforcement
+
+Our development workflow is integrated with a comprehensive CI/CD pipeline with **strict quality enforcement**. Before submitting changes:
+
+### ⚠️ Important: Strict Quality Gates
+
+- **All warnings are treated as errors** and will fail the pipeline
+- **Zero tolerance policy** for quality violations
+- **Complete validation** required for all files and changes
+- **No manual overrides** permitted for quality violations
+
+### Local Quality Checks
+
+Run the same checks that CI will perform (all must pass with zero violations):
+
+```bash
+# Code formatting (must pass with zero violations)
+find src tests -name "*.cpp" -o -name "*.hpp" | xargs clang-format -i
+
+# Static analysis (must pass with zero warnings/errors)
+cppcheck --enable=all --std=c++17 --verbose \
+  --suppress=missingIncludeSystem \
+  --suppress=unusedFunction \
+  src/ tests/
+
+# Build with all options (must pass with zero warnings)
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DBUILD_DOCS=ON \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+make -j$(nproc)
+
+# Run tests (all tests must pass)
+ctest --output-on-failure --verbose
+
+# Memory checks (must pass with zero leaks)
+valgrind --leak-check=full --show-leak-kinds=all ./ninja_util --help
+
+# Documentation build
+make docs
+```
+
+### Understanding CI Jobs
+
+The CI pipeline runs these main jobs (see [PIPELINE.md](PIPELINE.md) for details):
+
+1. **Quick Checks**: File validation and change detection
+2. **Quality & Compliance**: License, markdown, C++ analysis, file validation, docs validation
+3. **Build & Test**: Multi-platform matrix builds with comprehensive testing
+4. **Performance Tests**: Memory and performance validation (conditional)
+5. **Release**: Automated release preparation (tags only)
+
 ## Development Setup
 
 1. **Install dependencies** (see Installation section in README)
+
 2. **Build the project**:
 
    ```bash

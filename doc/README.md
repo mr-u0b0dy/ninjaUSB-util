@@ -5,25 +5,24 @@ This directory contains comprehensive documentation for the ninjaUSB-util projec
 ## 📚 Documentation Index
 
 ### For Users
+
 - **[User Guide](USER_GUIDE.md)** - Installation, usage, and troubleshooting
 
 ### For Contributors
+
 - **[Contributing Guide](CONTRIBUTING.md)** - Complete development workflow and guidelines
 - **[Development Guide](DEVELOPMENT.md)** - Technical development setup and procedures
 - **[Testing Guide](TESTING.md)** - Testing procedures and quality assurance
-- **[Pull Request Template](pull_request_template.md)** - PR guidelines and checklist
 
 ### For Maintainers
-- **[CI/CD Pipeline](PIPELINE.md)** - Pipeline documentation and troubleshooting
+
+- **[CI/CD Pipeline](PIPELINE.md)** - Comprehensive pipeline documentation and troubleshooting
 - **[Architecture Guide](ARCHITECTURE.md)** - System architecture and design decisions
 - **[Versioning Guide](VERSIONING.md)** - Version management and release process
 
-### Project Information
-- **[Documentation Improvements](DOCUMENTATION_IMPROVEMENTS.md)** - Documentation enhancement tracking
-
 ## 🗂️ Documentation Organization
 
-```
+```text
 doc/
 ├── README.md                       # This index file
 ├── USER_GUIDE.md                  # End-user documentation
@@ -32,65 +31,59 @@ doc/
 ├── TESTING.md                     # Testing procedures
 ├── PIPELINE.md                    # CI/CD pipeline documentation
 ├── ARCHITECTURE.md                # System design and architecture
-├── VERSIONING.md                  # Version management
-├── pull_request_template.md       # PR template and guidelines
-└── DOCUMENTATION_IMPROVEMENTS.md  # Documentation enhancements
+└── VERSIONING.md                  # Version management
 ```
 
-## 🚀 Quick Links
+## 🚀 Quick Start Paths
 
 ### New Contributors
+
 1. Start with [Contributing Guide](CONTRIBUTING.md) for complete setup
-2. Read [Development Guide](DEVELOPMENT.md) for technical details
+2. Review [Development Guide](DEVELOPMENT.md) for technical details
 3. Check [Testing Guide](TESTING.md) before submitting PRs
+4. Understand [Pipeline Documentation](PIPELINE.md) for CI/CD workflow
 
 ### Experienced Developers
-- [Pipeline Documentation](PIPELINE.md) for CI/CD details
-- [Architecture Guide](ARCHITECTURE.md) for system design
-- [Pull Request Template](pull_request_template.md) for submission guidelines
 
-### Users
-- [User Guide](USER_GUIDE.md) for installation and usage
-- [Project README](../README.md) for quick overview
+- [Pipeline Documentation](PIPELINE.md) for CI/CD details and troubleshooting
+- [Architecture Guide](ARCHITECTURE.md) for system design and technical decisions
+- [Testing Guide](TESTING.md) for comprehensive testing procedures
+
+### End Users
+
+- [User Guide](USER_GUIDE.md) for installation, usage, and troubleshooting
+- [Project README](../README.md) for project overview and quick start
 
 ## 📝 Documentation Standards
 
-All documentation follows:
-- Markdown format with consistent styling
-- Clear headings and navigation
-- Code examples with proper syntax highlighting
-- Cross-references between related documents
-- Regular updates to maintain accuracy
-- **[VERSIONING.md](VERSIONING.md)** - Version management system details
+All documentation follows these principles:
 
-## For Users
+- **Markdown Format**: Consistent styling with clear headings and navigation
+- **Code Examples**: Proper syntax highlighting and working examples
+- **Cross-References**: Links between related documents for easy navigation
+- **Regular Updates**: Maintained accuracy with version-controlled changes
+- **Progressive Disclosure**: From quick start to detailed technical information
 
-If you want to **use** ninjaUSB-util:
+## 🔄 Documentation Philosophy
 
-1. Start with **README.md** for quick start
-2. Read **USER_GUIDE.md** for comprehensive usage instructions
-3. Check command-line options: `./ninja_util --help`
+- **Minimal Root Files**: Keep project root clean with essential files only
+- **Detailed Guides**: Comprehensive information organized by topic and audience
+- **Single Source of Truth**: Avoid duplication; maintain authoritative information
+- **User-Focused**: Documentation paths tailored to different user types and goals
+- **CI/CD Integration**: Documentation workflow integrated with automated quality checks
 
-## For Contributors
+## ⚡ Recent Updates (June 2025)
 
-If you want to **contribute** to ninjaUSB-util:
+- **Enhanced CI/CD Documentation**: Updated PIPELINE.md with latest pipeline architecture
+- **Cross-Reference Improvements**: Better integration between documentation files
+- **Quality Standards**: Enhanced markdown linting and validation procedures
+- **Development Workflow**: Integrated CI/CD quality gates into contributor guides
 
-1. Start with **CONTRIBUTING.md** for quick setup
-2. Read **DEVELOPMENT.md** for detailed development guidelines
-3. Follow **TESTING.md** for testing procedures
-4. Understand **VERSIONING.md** for version management
+## 📞 Getting Help
 
-## For Maintainers
+1. **Search Documentation**: Use the index above to find relevant guides
+2. **Check Examples**: Most guides include practical examples and code samples
+3. **Review Pipeline**: [PIPELINE.md](PIPELINE.md) covers CI/CD troubleshooting
+4. **Contact Maintainers**: Use GitHub Issues for documentation feedback
 
-If you **maintain** ninjaUSB-util:
-
-- All guides in `doc/` contain comprehensive information
-- Version management is centralized through the VERSION file
-- Documentation follows a clear hierarchy from quick-start to detailed guides
-
-## Documentation Philosophy
-
-- **Minimal root files**: Keep the project root clean with essential files only
-- **Detailed guides in doc/**: Comprehensive information organized by topic
-- **Progressive disclosure**: Quick start → Detailed guides → Specialized topics
-- **Single source of truth**: Avoid duplication between documents
+---
