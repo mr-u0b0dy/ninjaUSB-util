@@ -58,7 +58,7 @@ Your Pull Request must pass these **strictly enforced** checks:
 - **License Compliance**: SPDX headers and license validation - **FAIL ON MISSING/INVALID**
 - **Code Quality**: Formatting (clang-format), static analysis (cppcheck, clang-tidy) - **FAIL ON VIOLATIONS**
 - **Documentation**: Coverage analysis and Doxygen validation - **FAIL ON INSUFFICIENT COVERAGE**
-- **File Standards**: Encoding, structure, and markdown linting - **FAIL ON LINT ERRORS**
+- **File Standards**: Source file encoding (ASCII/UTF-8), structure, and markdown linting - **FAIL ON LINT ERRORS**
 - **Build Success**: Multi-platform compilation (Ubuntu 22.04, 24.04) - **FAIL ON BUILD ERRORS**
 - **Test Coverage**: Unit tests with CTest and memory leak detection - **FAIL ON TEST FAILURES**
 - **Link Validation**: All markdown links must be valid - **FAIL ON BROKEN LINKS**
@@ -103,6 +103,16 @@ Our pipeline includes enhanced markdown validation:
 - **Link Validation**: Broken internal link detection
 - **Accessibility**: Image alt-text validation
 - **Formatting**: Trailing whitespace and consistency checks
+
+### File Encoding Requirements
+
+The project enforces specific encoding standards:
+
+- **Source Files** (`.cpp`, `.hpp`): Must be ASCII or UTF-8 encoded
+- **Documentation Files** (`.md`): UTF-8 recommended but not enforced by pipeline
+- **Configuration Files** (`.yml`, `.yaml`): UTF-8 recommended
+
+**Note**: The pipeline only validates encoding for source files to ensure maximum compatibility across different systems and compilers.
 
 ### Commit Message Guidelines
 
@@ -170,7 +180,7 @@ gcov src/*.cpp
 class DeviceManager {
 private:
     std::vector<std::unique_ptr<KeyboardDevice>> keyboards_;
-    
+
 public:
     /**
      * @brief Adds a new keyboard device to the manager
@@ -229,6 +239,7 @@ When reporting bugs, please include:
 
 ```markdown
 **Environment:**
+
 - OS: Ubuntu 22.04
 - Qt Version: 6.4.2
 - CMake Version: 3.24.0
@@ -272,6 +283,7 @@ Before submitting feature requests:
 Brief description of changes
 
 ## Type of Change
+
 - [ ] Bug fix
 - [ ] New feature
 - [ ] Documentation update
@@ -279,6 +291,7 @@ Brief description of changes
 - [ ] Refactoring
 
 ## Testing
+
 - [ ] Unit tests added/updated
 - [ ] Manual testing performed
 - [ ] CI pipeline passes

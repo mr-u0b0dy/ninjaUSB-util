@@ -25,7 +25,7 @@ We welcome contributions! Here's how to get started quickly:
 For comprehensive development guidelines, see **[doc/CONTRIBUTING.md](doc/CONTRIBUTING.md)** which includes:
 
 - 🛠️ Complete development environment setup
-- 🧪 Testing procedures and coverage guidelines  
+- 🧪 Testing procedures and coverage guidelines
 - 📝 Coding standards and style requirements
 - 🔍 Code quality tools and static analysis
 - 🚀 Release process and versioning
@@ -42,6 +42,7 @@ For comprehensive development guidelines, see **[doc/CONTRIBUTING.md](doc/CONTRI
 ## Quick Reference
 
 ### Building
+
 ```bash
 mkdir build && cd build
 cmake .. -DBUILD_TESTS=ON
@@ -49,11 +50,13 @@ make -j$(nproc)
 ```
 
 ### Testing
+
 ```bash
 ctest --output-on-failure
 ```
 
 ### Development Tools
+
 ```bash
 # Install development dependencies (Ubuntu/Debian)
 sudo apt update && sudo apt install -y \

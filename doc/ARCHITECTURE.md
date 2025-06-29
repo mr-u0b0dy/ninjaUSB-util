@@ -18,20 +18,20 @@ graph TB
             LS["Logger System<br/>• Log levels<br/>• Timestamps<br/>• Output format"]
             VM["Version Management<br/>• Build info<br/>• Runtime version<br/>• Git info"]
         end
-        
+
         subgraph "Main Event Loop"
             DM["Device Manager<br/>• udev monitor<br/>• Hot-plug<br/>• Device enumeration"]
             IP["Input Processing<br/>• Event polling<br/>• Key mapping<br/>• HID reports"]
             BLE["BLE Communication<br/>• Device discovery<br/>• Connection<br/>• Report transmission"]
         end
     end
-    
+
     subgraph "System Interface"
         UDEV["udev/evdev<br/>• Device events<br/>• Hotplug<br/>• Device info"]
         QTB["Qt Bluetooth<br/>• BLE scanning<br/>• GATT services<br/>• Characteristics"]
         LI["Linux Input<br/>• /dev/input/*<br/>• Event devices<br/>• Input events"]
     end
-    
+
     DM --> UDEV
     IP --> LI
     BLE --> QTB
@@ -125,12 +125,12 @@ flowchart TD
     LIS["Linux Input Subsystem<br/>• /dev/input/eventX<br/>• Event devices"]
     LE["libevdev Processing<br/>• Input events<br/>• Key codes<br/>• Event types"]
     NU["ninjaUSB-util App<br/>• Event loop<br/>• HID mapping<br/>• Report generation"]
-    
+
     HR["HID Reports<br/>• 8-byte report<br/>• USB HID format<br/>• Modifier keys"]
     QTB["Qt Bluetooth<br/>• BLE scanning<br/>• Connection<br/>• Service discovery"]
     BT["BLE Transport<br/>• GATT services<br/>• Characteristics<br/>• Report transmission"]
     TD["Target Device<br/>• USB HID output<br/>• Final input<br/>• Applications"]
-    
+
     UK --> LIS
     LIS --> LE
     LE --> NU

@@ -135,6 +135,11 @@ ninjaUSB-util/
   // SPDX-FileCopyrightText: 2025 Your Name
   ```
 
+- **File Encoding**: Follow project encoding standards:
+  - **Source files** (`.cpp`, `.hpp`): ASCII or UTF-8 encoding
+  - **Documentation files** (`.md`): UTF-8 encouraged but not enforced
+  - **Configuration files** (`.yml`, `.yaml`): UTF-8 recommended
+
 ### Version Management
 
 - **Never edit version.hpp directly** - it's auto-generated
@@ -178,11 +183,13 @@ When reporting bugs, please include:
 
 ```markdown
 **System Information:**
+
 - OS: [e.g., Ubuntu 22.04]
 - Kernel: [e.g., 5.15.0]
 - Qt6 Version: [e.g., 6.5.0]
 
 **Hardware:**
+
 - Keyboard: [e.g., Logitech K380]
 - BLE Device: [e.g., Samsung Smart TV]
 
@@ -319,7 +326,7 @@ using CMake's FetchContent module.
 /**
  * @brief Brief description of the function
  * @param param1 Description of first parameter
- * @param param2 Description of second parameter  
+ * @param param2 Description of second parameter
  * @return Description of return value
  * 
  * Detailed description of what the function does,

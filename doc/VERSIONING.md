@@ -16,7 +16,7 @@ MAJOR.MINOR.PATCH[-BUILD]
 Examples:
 
 - `1.0.0` - Release version
-- `1.0.0-dev` - Development version  
+- `1.0.0-dev` - Development version
 - `1.2.3-beta` - Beta version
 - `2.0.0-rc1` - Release candidate
 
@@ -34,7 +34,7 @@ The generated `version.hpp` provides:
 ### Macros
 
 - `NINJA_USB_VERSION_MAJOR` - Major version number
-- `NINJA_USB_VERSION_MINOR` - Minor version number  
+- `NINJA_USB_VERSION_MINOR` - Minor version number
 - `NINJA_USB_VERSION_PATCH` - Patch version number
 - `NINJA_USB_VERSION_BUILD` - Build suffix (e.g., "dev", "beta")
 
@@ -98,3 +98,7 @@ The version system is used in:
 
 This centralized approach ensures version consistency across the entire codebase
 and makes releases simple and error-free.
+
+---
+
+Documentation maintained with care ✓
