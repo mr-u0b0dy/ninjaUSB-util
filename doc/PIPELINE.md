@@ -52,7 +52,7 @@ graph TD
 - File change detection (only build if relevant files changed)
 - C++ source file discovery
 - Basic file validation (encoding, structure)
-- ASCII/UTF-8 encoding verification for source files (documentation files skipped)
+- ASCII encoding verification for source files (documentation files skipped)
 
 **Outputs:**
 
@@ -97,7 +97,7 @@ graph TD
 
 **d) File Validation (`file-validation`)** *(STRICT ENFORCEMENT)*
 
-- File encoding verification (ASCII/UTF-8 for source files) - **FAIL ON ENCODING VIOLATIONS**
+- File encoding verification (ASCII for source files) - **FAIL ON ENCODING VIOLATIONS**
 - Documentation file encoding checks skipped for flexibility
 - Unexpected executable file detection - **FAIL ON UNAUTHORIZED EXECUTABLES**
 - Large file detection (>1MB) - **FAIL ON OVERSIZED FILES**
@@ -212,7 +212,7 @@ Every pull request must pass these automated checks. **All quality gates are str
 
 ### 1. ✅ **Quick Validation** *(STRICT)*
 
-- File encoding verification (ASCII/UTF-8 for source files) - **FAIL ON ERROR**
+- File encoding verification (ASCII for source files) - **FAIL ON ERROR**
 - Basic file structure validation - **FAIL ON ERROR**
 - Change relevance detection
 - Documentation file encoding checks skipped for flexibility
@@ -222,7 +222,7 @@ Every pull request must pass these automated checks. **All quality gates are str
 - **License Compliance**: SPDX headers and license validation - **FAIL ON MISSING/INVALID**
 - **Code Quality**: Formatting, static analysis, complexity checks - **FAIL ON VIOLATIONS**
 - **Documentation**: Coverage analysis and validation - **FAIL ON INSUFFICIENT COVERAGE**
-- **File Standards**: Source file encoding (ASCII/UTF-8), structure, and size validation - **FAIL ON VIOLATIONS**
+- **File Standards**: Source file encoding (ASCII), structure, and size validation - **FAIL ON VIOLATIONS**
 - **Markup Quality**: YAML and Markdown linting - **FAIL ON LINT ERRORS**
 - **Link Validation**: Broken markdown links - **FAIL ON BROKEN LINKS**
 - **Mermaid Diagrams**: Syntax validation - **FAIL ON SYNTAX ERRORS**

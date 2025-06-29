@@ -1,6 +1,7 @@
 # ninjaUSB-util
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Main CI/CD Pipeline](https://github.com/mr-u0b0dy/ninjaUSB-util/actions/workflows/ci.yml/badge.svg)](https://github.com/mr-u0b0dy/ninjaUSB-util/actions/workflows/ci.yml)
 
 A Linux utility that bridges USB keyboard input to Bluetooth Low Energy (BLE) devices.
 
@@ -55,9 +56,12 @@ sudo ./ninja_util
 
 ### Developer Resources
 
-- **[Comprehensive Contributing Guide](doc/CONTRIBUTING.md)** - Complete development workflow
-- **[CI/CD Pipeline](doc/PIPELINE.md)** - Pipeline documentation and troubleshooting
-- **[Pull Request Template](doc/pull_request_template.md)** - PR guidelines and checklist
+- **[Comprehensive Contributing Guide](doc/CONTRIBUTING.md)** - Complete
+  development workflow
+- **[CI/CD Pipeline](doc/PIPELINE.md)** - Pipeline documentation and
+  troubleshooting
+- **[Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md)** - PR guidelines
+  and checklist
 
 ## Related Projects
 

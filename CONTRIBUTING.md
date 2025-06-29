@@ -18,11 +18,15 @@ We welcome contributions! Here's how to get started quickly:
 - Update documentation as needed
 - Ensure all CI checks pass
 
-**New Streamlined CI/CD Pipeline**: We've consolidated our workflows from 7 to 3 files for better efficiency. The main CI pipeline now includes integrated quality checks, conditional security scanning, and smart caching. See **[Pipeline Documentation](doc/PIPELINE.md)** for details.
+**New Streamlined CI/CD Pipeline**: We've consolidated our workflows from 7 to 3 files
+for better efficiency. The main CI pipeline now includes integrated quality
+checks, conditional security scanning, and smart caching. See
+**[Pipeline Documentation](doc/PIPELINE.md)** for details.
 
 ## 📚 Detailed Documentation
 
-For comprehensive development guidelines, see **[doc/CONTRIBUTING.md](doc/CONTRIBUTING.md)** which includes:
+For comprehensive development guidelines, see
+**[doc/CONTRIBUTING.md](doc/CONTRIBUTING.md)** which includes:
 
 - 🛠️ Complete development environment setup
 - 🧪 Testing procedures and coverage guidelines

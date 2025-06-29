@@ -98,7 +98,3 @@ The version system is used in:
 
 This centralized approach ensures version consistency across the entire codebase
 and makes releases simple and error-free.
-
----
-
-Documentation maintained with care ✓

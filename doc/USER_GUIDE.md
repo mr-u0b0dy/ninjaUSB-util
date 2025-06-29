@@ -170,10 +170,6 @@ HID usage IDs.
 flowchart LR
     A[USB Keyboard<br/>/dev/input/eventX] --> B[ninjaUSB-util<br/>• Device Management<br/>• udev monitoring<br/>• libevdev processing<br/>• Qt6 Bluetooth<br/>• Argument parsing<br/>• Logging system]
     B --> C[BLE Device<br/>HID Keyboard<br/>Reports]
-
-    style A fill:#e1f5fe
-    style B fill:#f3e5f5
-    style C fill:#e8f5e8
 ```
 
 ### Key Components
