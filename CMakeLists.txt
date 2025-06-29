@@ -36,8 +36,27 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBUDEV REQUIRED libudev)
-pkg_check_modules(LIBEVDEV REQUIRED libevdev)
+
+# Check for required system libraries with helpful error messages
+pkg_check_modules(LIBUDEV libudev)
+if(NOT LIBUDEV_FOUND)
+    message(FATAL_ERROR 
+        "libudev development library not found!\n"
+        "Please install it using:\n"
+        "  Ubuntu/Debian: sudo apt-get install libudev-dev\n"
+        "  Fedora/RHEL: sudo dnf install systemd-devel\n"
+        "  Arch: sudo pacman -S systemd")
+endif()
+
+pkg_check_modules(LIBEVDEV libevdev)
+if(NOT LIBEVDEV_FOUND)
+    message(FATAL_ERROR 
+        "libevdev development library not found!\n"
+        "Please install it using:\n"
+        "  Ubuntu/Debian: sudo apt-get install libevdev-dev\n"
+        "  Fedora/RHEL: sudo dnf install libevdev-devel\n"
+        "  Arch: sudo pacman -S libevdev")
+endif()
 
 # Try Qt6 first, fall back to Qt5 if needed
 find_package(Qt6 QUIET COMPONENTS Core Bluetooth)

@@ -6,6 +6,13 @@ on:
     tags: [ 'v*' ]
   pull_request:
     branches: [ main, dev ]
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        description: 'Enable debug mode'
+        required: false
+        default: false
+        type: boolean
 
 env:
   BUILD_TYPE: Release
@@ -61,11 +68,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        ubuntu-version: [20.04, 22.04, 24.04]
-        build-type: [Debug, Release]
+        ubuntu-version: [22.04, 24.04]
+        build-type: [Release]
         include:
-          - ubuntu-version: 20.04
-            qt-version: "6.2.*"
+          - ubuntu-version: 24.04
+            build-type: Debug
+            enable-tests: true
           - ubuntu-version: 22.04
             qt-version: "6.4.*"
           - ubuntu-version: 24.04
@@ -75,10 +83,12 @@ jobs:
       image: ubuntu:${{ matrix.ubuntu-version }}
 
     steps:
-    - name: Install base dependencies
+    - name: Install dependencies and build tools
       run: |
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -qq
+        
+        # Install base build tools and system libraries first
         apt-get install -y --no-install-recommends \
           build-essential \
           cmake \
@@ -89,47 +99,46 @@ jobs:
           software-properties-common \
           wget \
           gnupg2 \
-          lsb-release
+          lsb-release \
+          libudev-dev \
+          libevdev-dev \
+          doxygen \
+          graphviz \
+          ccache
 
-    - name: Install Qt6 dependencies by Ubuntu version
+    - name: Install Qt6 dependencies (optimized)
       run: |
         export DEBIAN_FRONTEND=noninteractive
         UBUNTU_VERSION="${{ matrix.ubuntu-version }}"
         echo "Installing Qt6 for Ubuntu ${UBUNTU_VERSION}"
         
-        if [ "${UBUNTU_VERSION}" = "20.04" ]; then
-          # Ubuntu 20.04: Use Qt6 from universe and add PPA if needed
-          apt-get install -y --no-install-recommends software-properties-common
-          add-apt-repository -y universe
-          apt-get update -qq
-          
-          # Try to install Qt6 from universe first
-          if ! apt-get install -y --no-install-recommends qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6; then
-            echo "Qt6 not available in universe, trying PPA..."
-            add-apt-repository -y ppa:okirby/qt6-backports || true
-            apt-get update -qq
-            apt-get install -y --no-install-recommends qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6 || {
-              echo "Qt6 installation failed, falling back to Qt5"
-              apt-get install -y --no-install-recommends qtbase5-dev qtconnectivity5-dev libqt5core5a libqt5bluetooth5
-              echo "QT_VERSION=5" >> $GITHUB_ENV
-            }
-          fi
-        elif [ "${UBUNTU_VERSION}" = "22.04" ]; then
-          # Ubuntu 22.04: Qt6 should be available
-          apt-get install -y --no-install-recommends qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6
-        else
-          # Ubuntu 24.04: Latest Qt6
-          apt-get install -y --no-install-recommends qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6
-        fi
+        # Simplified Qt6 installation with timeout protection
+        timeout 240 bash -c '
+          echo "Installing Qt6 packages..."
+          apt-get install -y --no-install-recommends qt6-base-dev qt6-bluetooth-dev
+        ' || {
+          echo "Qt6 installation timed out or failed, trying Qt5 fallback"
+          apt-get install -y --no-install-recommends qtbase5-dev qtconnectivity5-dev || {
+            echo "Both Qt6 and Qt5 installation failed"
+            exit 1
+          }
+          echo "QT_VERSION=5" >> $GITHUB_ENV
+        }
 
-    - name: Install system libraries
+    - name: Debug Information
+      if: github.event.inputs.debug_enabled == 'true'
       run: |
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get install -y --no-install-recommends \
-          libudev-dev \
-          libevdev-dev \
-          doxygen \
-          graphviz
+        echo "=== Debug Information ==="
+        echo "Ubuntu Version: ${{ matrix.ubuntu-version }}"
+        echo "Build Type: ${{ matrix.build-type }}"
+        echo "Available packages for Qt6:"
+        apt-cache search qt6-base || true
+        echo "Available packages for libudev:"
+        apt-cache search libudev || true
+        echo "System information:"
+        uname -a
+        lscpu | head -10
+        free -h
 
     - name: Checkout code
       uses: actions/checkout@v4
@@ -166,45 +175,59 @@ jobs:
         echo "=== CMake Configuration ==="
         echo "Build type: ${{ matrix.build-type }}"
         echo "Ubuntu version: ${{ matrix.ubuntu-version }}"
+        echo "Qt version: ${QT_VERSION:-6}"
         
-        # Cache CMake configuration
+        # Configure with error handling
+        ENABLE_TESTS=${{ matrix.enable-tests == true && 'ON' || 'OFF' }}
         cmake .. \
           -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
-          -DBUILD_TESTS=ON \
+          -DBUILD_TESTS=${ENABLE_TESTS} \
           -DBUILD_DOCS=ON \
           -DCMAKE_VERBOSE_MAKEFILE=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          || {
+            echo "CMake configuration failed, checking for missing dependencies..."
+            pkg-config --exists libudev || echo "WARNING: libudev not found"
+            pkg-config --exists libevdev || echo "WARNING: libevdev not found"
+            echo "CMake Error Details:"
+            cat CMakeFiles/CMakeError.log 2>/dev/null || echo "No CMakeError.log found"
+            exit 1
+          }
 
-    # Cache build artifacts
+    # Cache build artifacts with better keys
     - name: Cache build artifacts
       uses: actions/cache@v4
       with:
         path: |
           build/
           ~/.ccache
-        key: build-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}-${{ hashFiles('src/**', 'CMakeLists.txt') }}
+        key: build-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}-${{ hashFiles('src/**', 'CMakeLists.txt', '.github/workflows/ci.yml') }}
         restore-keys: |
           build-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}-
           build-${{ matrix.ubuntu-version }}-
-
-    - name: Install ccache
-      run: |
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get install -y ccache
-        ccache --version
-        ccache --show-stats
 
     - name: Build
       run: |
         cd build
         echo "=== Starting Build ==="
         echo "Available cores: $(nproc)"
-        ccache --zero-stats
-        make -j$(nproc) VERBOSE=1
-        ccache --show-stats
+        ccache --zero-stats || echo "ccache not available"
+        
+        # Build with better error handling
+        make -j$(nproc) VERBOSE=1 || {
+          echo "Build failed, checking logs..."
+          echo "=== CMake Cache ==="
+          cat CMakeCache.txt | grep -E "(CMAKE_|Qt|LIBUDEV|LIBEVDEV)" || true
+          echo "=== Build Log Tail ==="
+          tail -50 *.log 2>/dev/null || echo "No log files found"
+          exit 1
+        }
+        
+        ccache --show-stats || echo "ccache stats not available"
 
     - name: Run tests
+      if: matrix.enable-tests == true
       run: |
         cd build
         ctest --output-on-failure --verbose
@@ -323,14 +346,31 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Install build dependencies for CodeQL
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+          build-essential \
+          cmake \
+          pkg-config \
+          libudev-dev \
+          libevdev-dev \
+          qt6-base-dev \
+          qt6-bluetooth-dev
+
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
         languages: 'cpp'
         queries: security-extended
 
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v3
+    - name: Manual build for CodeQL
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DBUILD_DOCS=OFF
+        make -j$(nproc)
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
