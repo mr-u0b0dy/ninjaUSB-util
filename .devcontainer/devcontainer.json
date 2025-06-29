@@ -1,0 +1,93 @@
+{
+    "name": "ninjaUSB-util Development",
+    "image": "ubuntu:24.04",
+    
+    "features": {
+        "ghcr.io/devcontainers/features/common-utils:2": {
+            "installZsh": true,
+            "configureZshAsDefaultShell": true,
+            "installOhMyZsh": true,
+            "upgradePackages": true,
+            "username": "vscode",
+            "userUid": "1000",
+            "userGid": "1000"
+        },
+        "ghcr.io/devcontainers/features/git:1": {
+            "ppa": true,
+            "version": "latest"
+        }
+    },
+
+    "onCreateCommand": [
+        "bash",
+        "-c",
+        "apt-get update && apt-get install -y cmake qt6-base-dev qt6-bluetooth-dev libudev-dev libevdev-dev build-essential pkg-config clang-tidy cppcheck valgrind doxygen graphviz clang-format gdb"
+    ],
+
+    "postCreateCommand": [
+        "bash",
+        "-c", 
+        "echo 'Development environment ready! Run: mkdir build && cd build && cmake .. -DBUILD_TESTS=ON && make -j$(nproc)'"
+    ],
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cmake-tools",
+                "ms-vscode.makefile-tools",
+                "xaver.clang-format",
+                "streetsidesoftware.code-spell-checker",
+                "GitHub.copilot",
+                "GitHub.copilot-chat",
+                "DavidAnson.vscode-markdownlint"
+            ],
+            "settings": {
+                "C_Cpp.default.cppStandard": "c++17",
+                "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+                "C_Cpp.default.compilerPath": "/usr/bin/gcc",
+                "cmake.configureOnOpen": true,
+                "cmake.buildBeforeRun": true,
+                "files.associations": {
+                    "*.hpp": "cpp",
+                    "*.cpp": "cpp"
+                },
+                "editor.formatOnSave": true,
+                "C_Cpp.clang_format_path": "/usr/bin/clang-format",
+                "editor.rulers": [100],
+                "terminal.integrated.defaultProfile.linux": "zsh",
+                "git.autofetch": true,
+                "git.enableSmartCommit": true,
+                "workbench.colorTheme": "Default Dark Modern",
+                "editor.minimap.enabled": true,
+                "editor.lineNumbers": "on",
+                "editor.renderWhitespace": "boundary",
+                "files.trimTrailingWhitespace": true,
+                "files.insertFinalNewline": true,
+                "markdownlint.config": {
+                    "MD022": false,
+                    "MD032": false,
+                    "MD031": false
+                }
+            }
+        }
+    },
+
+    "forwardPorts": [3000, 8080],
+    "portsAttributes": {
+        "3000": {
+            "label": "Development Server",
+            "onAutoForward": "notify"
+        }
+    },
+
+    "mounts": [
+        "source=/dev,target=/dev,type=bind"
+    ],
+
+    "privileged": true,
+    "runArgs": ["--device-cgroup-rule=c 189:* rmw"],
+
+    "remoteUser": "vscode",
+
+    "workspaceFolder": "/workspaces/ninjaUSB-util"
+}

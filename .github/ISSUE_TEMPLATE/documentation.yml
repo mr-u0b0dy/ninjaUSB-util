@@ -1,0 +1,83 @@
+name: 📚 Documentation Issue
+description: Report an issue with documentation
+title: '[DOCS] '
+labels: ['documentation', 'needs-triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 📚 Documentation Issue
+        
+        Thank you for helping improve our documentation! Please provide details about what needs to be fixed or improved.
+
+  - type: textarea
+    id: documentation-issue
+    attributes:
+      label: 📚 What documentation needs improvement?
+      description: Describe the documentation issue you found
+      placeholder: Explain what documentation needs attention...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: location
+    attributes:
+      label: 📍 Location
+      description: Where is the documentation issue located?
+      options:
+        - label: README.md
+        - label: User Guide (doc/USER_GUIDE.md)
+        - label: API Documentation (Doxygen)
+        - label: Development Guide (doc/DEVELOPMENT.md)
+        - label: Contributing Guide (doc/CONTRIBUTING.md)
+        - label: Architecture Guide (doc/ARCHITECTURE.md)
+        - label: Pipeline Documentation (doc/PIPELINE.md)
+        - label: Testing Guide (doc/TESTING.md)
+        - label: Versioning Guide (doc/VERSIONING.md)
+        - label: Other (please specify in additional context)
+
+  - type: checkboxes
+    id: issue-type
+    attributes:
+      label: 🐛 Issue Type
+      description: What type of documentation issue is this?
+      options:
+        - label: Information is missing
+        - label: Information is incorrect
+        - label: Information is outdated
+        - label: Information is unclear
+        - label: Typo/grammar issue
+        - label: Broken link
+        - label: Missing examples
+        - label: Formatting issues
+        - label: Other (please specify below)
+
+  - type: textarea
+    id: current-content
+    attributes:
+      label: 📝 Current Content
+      description: What does the current documentation say? (copy/paste if possible)
+      placeholder: Copy the current text or describe what's currently there...
+
+  - type: textarea
+    id: suggested-improvement
+    attributes:
+      label: ✨ Suggested Improvement
+      description: What should the documentation say instead?
+      placeholder: Provide your suggested improvement...
+    validations:
+      required: true
+
+  - type: textarea
+    id: related-links
+    attributes:
+      label: 🔗 Related Links
+      description: Any related documentation or external resources?
+      placeholder: Links to related documentation, issues, or external resources...
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 📋 Additional Context
+      description: Any additional information that would help improve the documentation?
+      placeholder: Any other context, screenshots, or examples...
