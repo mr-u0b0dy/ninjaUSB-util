@@ -43,7 +43,7 @@ jobs:
           libudev-dev \
           libevdev-dev \
           qt6-base-dev \
-          qt6-bluetooth-dev \
+          qt6-connectivity-dev \
           jq
 
     # Cache CMake build for security scanning

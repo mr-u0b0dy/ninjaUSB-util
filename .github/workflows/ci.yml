@@ -112,9 +112,15 @@ jobs:
         UBUNTU_VERSION="${{ matrix.ubuntu-version }}"
         echo "Installing Qt6 for Ubuntu ${UBUNTU_VERSION}"
         
-        # Install Qt6 packages (latest version only)
+        # Install Qt6 packages
+        # qt6-base-dev: Core Qt6 development libraries
+        # qt6-connectivity-dev: Bluetooth and other connectivity modules (includes Qt6Bluetooth)
         echo "Installing Qt6 packages..."
-        apt-get install -y --no-install-recommends qt6-base-dev libqt6bluetooth6-dev
+        apt-get install -y --no-install-recommends qt6-base-dev qt6-connectivity-dev || {
+          echo "Failed to install Qt6 packages. Available Qt6 packages:"
+          apt-cache search qt6 | grep -E "(base|connectivity|bluetooth)" || true
+          exit 1
+        }
 
     - name: Debug Information
       if: github.event.inputs.debug_enabled == 'true'

@@ -598,7 +598,7 @@ jobs:
           libudev-dev \
           libevdev-dev \
           qt6-base-dev \
-          libqt6bluetooth6-dev \
+          qt6-connectivity-dev \
           doxygen \
           graphviz \
           curl \

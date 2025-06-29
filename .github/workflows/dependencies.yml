@@ -27,7 +27,10 @@ jobs:
         
         # Check current Qt version requirements
         if grep -q "qt6-base-dev" README.md; then
-          echo "Current Qt6 dependency found in README"
+          echo "Current Qt6 base dependency found in README"
+        fi
+        if grep -q "qt6-connectivity-dev" README.md; then
+          echo "Current Qt6 connectivity dependency found in README"
         fi
         
         # Check latest Qt6 LTS versions
@@ -68,10 +71,10 @@ jobs:
         Generated on: $(date)
         
         ## System Dependencies
-        - Qt6 Base Development
-        - Qt6 Bluetooth
-        - libudev-dev
-        - libevdev-dev
+        - Qt6 Base Development (qt6-base-dev)
+        - Qt6 Connectivity (qt6-connectivity-dev) - includes Bluetooth
+        - libudev Development (libudev-dev)
+        - libevdev Development (libevdev-dev)
         - CMake
         
         ## GitHub Actions

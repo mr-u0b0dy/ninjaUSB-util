@@ -31,13 +31,11 @@ jobs:
           python3 \
           python3-pip \
           python3-venv \
-          grep \
-          find \
-          sed \
-          awk \
           file \
           zip \
           unzip
+        
+        # Note: find (from findutils), grep, sed, and awk (from mawk) are pre-installed in Ubuntu containers
 
     - name: Checkout code
       uses: actions/checkout@v4

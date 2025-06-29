@@ -24,7 +24,7 @@ A Linux utility that bridges USB keyboard input to Bluetooth Low Energy (BLE) de
 
 ```bash
 # Install dependencies (Ubuntu/Debian)
-sudo apt install cmake qt6-base-dev qt6-bluetooth-dev libudev-dev libevdev-dev
+sudo apt install cmake qt6-base-dev qt6-connectivity-dev libudev-dev libevdev-dev
 
 # Build
 mkdir build && cd build
