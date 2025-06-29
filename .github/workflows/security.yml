@@ -4,33 +4,60 @@ on:
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday at 6 AM UTC
   push:
-    branches: [ main ]
+    branches: [ main, dev ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, dev ]
+
+env:
+  CACHE_VERSION: v1
 
 jobs:
   dependency-scan:
     name: Dependency Vulnerability Scan
     runs-on: ubuntu-latest
+    outputs:
+      vulnerabilities-found: ${{ steps.check-vulnerabilities.outputs.found }}
+      critical-count: ${{ steps.check-vulnerabilities.outputs.critical }}
+      high-count: ${{ steps.check-vulnerabilities.outputs.high }}
+      medium-count: ${{ steps.check-vulnerabilities.outputs.medium }}
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    # Cache APT packages for faster dependency installation
+    - name: Cache APT packages
+      uses: actions/cache@v4
+      with:
+        path: /var/cache/apt
+        key: apt-security-${{ runner.os }}-${{ env.CACHE_VERSION }}
+        restore-keys: |
+          apt-security-${{ runner.os }}-
+
     - name: Install dependencies
       run: |
-        sudo apt-get update
+        sudo apt-get update -qq
         sudo apt-get install -y \
           cmake \
           pkg-config \
           libudev-dev \
           libevdev-dev \
           qt6-base-dev \
-          qt6-bluetooth-dev
+          qt6-bluetooth-dev \
+          jq
+
+    # Cache CMake build for security scanning
+    - name: Cache CMake build
+      uses: actions/cache@v4
+      with:
+        path: build/
+        key: security-build-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'src/**') }}-${{ env.CACHE_VERSION }}
+        restore-keys: |
+          security-build-${{ runner.os }}-
 
     - name: Generate CMake dependency info
       run: |
-        mkdir build
+        mkdir -p build
         cd build
         cmake .. -DCMAKE_BUILD_TYPE=Release
 
@@ -41,12 +68,147 @@ jobs:
         scan-ref: '.'
         format: 'sarif'
         output: 'trivy-results.sarif'
+        exit-code: '0'  # Don't fail the job, we'll handle it manually
+
+    - name: Run Trivy for JSON output
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'json'
+        output: 'trivy-results.json'
+        exit-code: '0'
+
+    - name: Check Trivy results and create issue if vulnerabilities found
+      id: check-vulnerabilities
+      run: |
+        if [ -f "trivy-results.json" ]; then
+          # Count vulnerabilities by severity
+          CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-results.json 2>/dev/null || echo "0")
+          HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' trivy-results.json 2>/dev/null || echo "0")
+          MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "MEDIUM")] | length' trivy-results.json 2>/dev/null || echo "0")
+          
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high=$HIGH" >> $GITHUB_OUTPUT
+          echo "medium=$MEDIUM" >> $GITHUB_OUTPUT
+          
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "Found vulnerabilities: Critical=$CRITICAL, High=$HIGH, Medium=$MEDIUM"
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "No critical or high severity vulnerabilities found"
+          fi
+        else
+          echo "found=false" >> $GITHUB_OUTPUT
+          echo "critical=0" >> $GITHUB_OUTPUT
+          echo "high=0" >> $GITHUB_OUTPUT
+          echo "medium=0" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create issue for Trivy vulnerabilities
+      if: steps.check-vulnerabilities.outputs.found == 'true'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const title = `🚨 Dependency Vulnerabilities Detected - ${new Date().toISOString().split('T')[0]}`;
+          const critical = '${{ steps.check-vulnerabilities.outputs.critical }}';
+          const high = '${{ steps.check-vulnerabilities.outputs.high }}';
+          const medium = '${{ steps.check-vulnerabilities.outputs.medium }}';
+          
+          const body = `
+          ## Dependency Security Alert 📦🔒
+          
+          Trivy has detected security vulnerabilities in project dependencies.
+          
+          **Vulnerability Summary:**
+          - 🔴 **Critical:** ${critical}
+          - 🟠 **High:** ${high}
+          - 🟡 **Medium:** ${medium}
+          
+          **Scan Details:**
+          - **Repository:** ${{ github.repository }}
+          - **Branch:** ${{ github.ref_name }}
+          - **Commit:** ${{ github.sha }}
+          - **Scan Date:** ${new Date().toISOString()}
+          - **Workflow Run:** [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          **Action Required:**
+          1. Download the detailed scan results from the workflow artifacts
+          2. Review the SARIF file in the [Security tab](https://github.com/${{ github.repository }}/security/code-scanning)
+          3. Update affected dependencies to patched versions
+          4. Consider using dependency pinning for critical packages
+          5. Re-run the security scan after updates
+          
+          **Remediation Priority:**
+          ${critical > 0 ? '🔴 **CRITICAL** - Immediate action required' : 
+            high > 0 ? '🟠 **HIGH** - Address within 24-48 hours' : 
+            '🟡 **MEDIUM** - Address in next maintenance cycle'}
+          
+          ---
+          *This issue was automatically created by the dependency security scanner.*
+          `;
+          
+          // Check if a similar issue already exists
+          const existingIssues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: ['security', 'dependencies', 'vulnerability'],
+            state: 'open'
+          });
+          
+          const recentIssue = existingIssues.data.find(issue => 
+            issue.title.includes('Dependency Vulnerabilities Detected') && 
+            new Date(issue.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000) // Within 24 hours
+          );
+          
+          if (!recentIssue) {
+            const issueResponse = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['security', 'dependencies', 'vulnerability', 'automated', 
+                      critical > 0 ? 'critical' : high > 0 ? 'high-priority' : 'medium-priority']
+            });
+            console.log(`Created dependency vulnerability issue #${issueResponse.data.number}`);
+          } else {
+            // Update existing issue with new scan results
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: recentIssue.number,
+              body: `
+              ## Updated Scan Results - ${new Date().toISOString().split('T')[0]}
+              
+              New vulnerability scan completed:
+              - 🔴 Critical: ${critical}
+              - 🟠 High: ${high} 
+              - 🟡 Medium: ${medium}
+              
+              **Workflow:** [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              **Commit:** ${{ github.sha }}
+              `
+            });
+            console.log(`Updated existing issue #${recentIssue.number} with new scan results`);
+          }
 
     - name: Upload Trivy scan results to GitHub Security
       uses: github/codeql-action/upload-sarif@v3
       if: always()
       with:
         sarif_file: 'trivy-results.sarif'
+
+    - name: Upload detailed vulnerability report
+      if: steps.check-vulnerabilities.outputs.found == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-vulnerability-report-${{ github.sha }}
+        path: |
+          trivy-results.json
+          trivy-results.sarif
+        retention-days: 90  # Keep vulnerability reports longer
 
   license-check:
     name: License Compliance Check
@@ -57,6 +219,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Check license headers
+      id: license-headers
       run: |
         # Check that all source files have proper license headers
         missing_headers=()
@@ -70,18 +233,123 @@ jobs:
         if [ ${#missing_headers[@]} -gt 0 ]; then
           echo "❌ Files missing license headers:"
           printf '%s\n' "${missing_headers[@]}"
+          # Save missing files for issue creation
+          printf '%s\n' "${missing_headers[@]}" > missing_license_files.txt
+          echo "license-issues=true" >> $GITHUB_OUTPUT
+          echo "missing-count=${#missing_headers[@]}" >> $GITHUB_OUTPUT
           exit 1
         else
           echo "✅ All source files have proper license headers"
+          echo "license-issues=false" >> $GITHUB_OUTPUT
+          echo "missing-count=0" >> $GITHUB_OUTPUT
         fi
 
     - name: Verify LICENSE file
+      id: license-file
       run: |
         if [ ! -f LICENSE ]; then
           echo "❌ LICENSE file not found"
+          echo "license-file-missing=true" >> $GITHUB_OUTPUT
           exit 1
+        else
+          echo "✅ LICENSE file found"
+          echo "license-file-missing=false" >> $GITHUB_OUTPUT
         fi
-        echo "✅ LICENSE file found"
+
+    - name: Create issue for license compliance failures
+      if: failure() && (steps.license-headers.outputs.license-issues == 'true' || steps.license-file.outputs.license-file-missing == 'true')
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const title = `📄 License Compliance Issues Detected - ${new Date().toISOString().split('T')[0]}`;
+          const missingHeaders = '${{ steps.license-headers.outputs.license-issues }}' === 'true';
+          const missingLicenseFile = '${{ steps.license-file.outputs.license-file-missing }}' === 'true';
+          const missingCount = '${{ steps.license-headers.outputs.missing-count }}' || '0';
+          
+          let issues = [];
+          if (missingHeaders) {
+            issues.push(`- ${missingCount} source files missing SPDX license headers`);
+          }
+          if (missingLicenseFile) {
+            issues.push(`- Repository LICENSE file is missing`);
+          }
+          
+          const body = `
+          ## License Compliance Alert ⚖️
+          
+          The automated license compliance check has identified issues that need attention.
+          
+          **Issues Found:**
+          ${issues.map(issue => issue).join('\n')}
+          
+          **Repository Details:**
+          - **Repository:** ${{ github.repository }}
+          - **Branch:** ${{ github.ref_name }}
+          - **Commit:** ${{ github.sha }}
+          - **Workflow Run:** [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          **Required Actions:**
+          
+          ${missingHeaders ? `
+          ### 📝 Missing License Headers
+          - Add SPDX-License-Identifier headers to all source files
+          - Use format: \`// SPDX-License-Identifier: [LICENSE-NAME]\`
+          - Download the list of affected files from workflow artifacts
+          
+          **Quick Fix Command:**
+          \`\`\`bash
+          # Add license header to all C++ files
+          find src tests -name "*.cpp" -o -name "*.hpp" | xargs -I {} sh -c 'echo "// SPDX-License-Identifier: MIT" > {}.tmp && cat {} >> {}.tmp && mv {}.tmp {}'
+          \`\`\`
+          ` : ''}
+          
+          ${missingLicenseFile ? `
+          ### 📋 Missing LICENSE File
+          - Add a LICENSE file to the repository root
+          - Choose an appropriate open source license
+          - Consider using: MIT, Apache-2.0, GPL-3.0, etc.
+          ` : ''}
+          
+          **Compliance Priority:** Medium 🟡
+          
+          ---
+          *This issue was automatically created by the license compliance checker.*
+          `;
+          
+          // Check if a similar issue already exists
+          const existingIssues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: ['license', 'compliance'],
+            state: 'open'
+          });
+          
+          const recentIssue = existingIssues.data.find(issue => 
+            issue.title.includes('License Compliance Issues') && 
+            new Date(issue.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Within 7 days
+          );
+          
+          if (!recentIssue) {
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['license', 'compliance', 'automated', 'medium-priority']
+            });
+            console.log('Created license compliance issue');
+          } else {
+            console.log('Recent license compliance issue already exists, skipping creation');
+          }
+
+    - name: Upload license compliance report
+      if: failure() && steps.license-headers.outputs.license-issues == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: license-compliance-report-${{ github.sha }}
+        path: missing_license_files.txt
+        retention-days: 30
 
   supply-chain-security:
     name: Supply Chain Security

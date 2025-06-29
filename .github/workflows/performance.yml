@@ -2,11 +2,14 @@ name: Performance & Benchmarks
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, dev ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, dev ]
   schedule:
     - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM UTC
+
+env:
+  CACHE_VERSION: v1
 
 jobs:
   performance-test:
@@ -16,9 +19,18 @@ jobs:
       image: ubuntu:24.04
 
     steps:
+    # Cache APT packages
+    - name: Cache APT packages
+      uses: actions/cache@v4
+      with:
+        path: /var/cache/apt
+        key: apt-perf-${{ runner.os }}-${{ env.CACHE_VERSION }}
+        restore-keys: |
+          apt-perf-${{ runner.os }}-
+
     - name: Install dependencies
       run: |
-        apt-get update
+        apt-get update -qq
         apt-get install -y \
           build-essential \
           cmake \
@@ -30,19 +42,33 @@ jobs:
           qt6-bluetooth-dev \
           valgrind \
           time \
-          bc
+          bc \
+          ccache
 
     - name: Checkout code
       uses: actions/checkout@v4
 
+    # Cache build artifacts for performance testing
+    - name: Cache performance build
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/
+          ~/.ccache
+        key: perf-build-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'src/**') }}-${{ env.CACHE_VERSION }}
+        restore-keys: |
+          perf-build-${{ runner.os }}-
+
     - name: Build optimized release
       run: |
-        mkdir build
+        mkdir -p build
         cd build
         cmake .. \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_CXX_FLAGS="-O3 -march=native" \
-          -DBUILD_TESTS=ON
+          -DBUILD_TESTS=ON \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         make -j$(nproc)
 
     - name: Memory leak detection with Valgrind

@@ -9,8 +9,53 @@ on:
 
 env:
   BUILD_TYPE: Release
+  CACHE_VERSION: v1
 
 jobs:
+  # Job 1: Quick checks first for fast feedback
+  code-style-check:
+    name: Code Style & Formatting
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Cache clang-format
+      uses: actions/cache@v4
+      with:
+        path: /usr/bin/clang-format
+        key: clang-format-${{ runner.os }}-${{ env.CACHE_VERSION }}
+
+    - name: Install clang-format
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y clang-format
+
+    - name: Check code formatting
+      run: |
+        echo "🔍 Checking C++ code formatting..."
+        SOURCES=$(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null || true)
+        if [ -z "$SOURCES" ]; then
+          echo "ℹ️  No C++ source files found to check"
+          exit 0
+        fi
+        
+        FORMAT_ISSUES=0
+        for file in $SOURCES; do
+          if ! clang-format --dry-run --Werror "$file" >/dev/null 2>&1; then
+            echo "❌ Formatting issues in: $file"
+            clang-format --dry-run --Werror "$file" || true
+            FORMAT_ISSUES=1
+          fi
+        done
+        
+        if [ $FORMAT_ISSUES -eq 1 ]; then
+          echo "💡 Run 'clang-format -i \$(find src tests -name \"*.cpp\" -o -name \"*.hpp\")' to fix formatting"
+          exit 1
+        fi
+        echo "✅ All files are properly formatted"
+
+  # Job 2: Build matrix with caching
   build-and-test:
     name: Build and Test
     runs-on: ubuntu-latest
@@ -32,8 +77,9 @@ jobs:
     steps:
     - name: Install base dependencies
       run: |
-        apt-get update
-        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq
+        apt-get install -y --no-install-recommends \
           build-essential \
           cmake \
           git \
@@ -47,37 +93,39 @@ jobs:
 
     - name: Install Qt6 dependencies by Ubuntu version
       run: |
+        export DEBIAN_FRONTEND=noninteractive
         UBUNTU_VERSION="${{ matrix.ubuntu-version }}"
         echo "Installing Qt6 for Ubuntu ${UBUNTU_VERSION}"
         
         if [ "${UBUNTU_VERSION}" = "20.04" ]; then
           # Ubuntu 20.04: Use Qt6 from universe and add PPA if needed
-          apt-get install -y software-properties-common
+          apt-get install -y --no-install-recommends software-properties-common
           add-apt-repository -y universe
-          apt-get update
+          apt-get update -qq
           
           # Try to install Qt6 from universe first
-          if ! apt-get install -y qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6; then
+          if ! apt-get install -y --no-install-recommends qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6; then
             echo "Qt6 not available in universe, trying PPA..."
             add-apt-repository -y ppa:okirby/qt6-backports || true
-            apt-get update
-            apt-get install -y qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6 || {
+            apt-get update -qq
+            apt-get install -y --no-install-recommends qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6 || {
               echo "Qt6 installation failed, falling back to Qt5"
-              apt-get install -y qtbase5-dev qtconnectivity5-dev libqt5core5a libqt5bluetooth5
+              apt-get install -y --no-install-recommends qtbase5-dev qtconnectivity5-dev libqt5core5a libqt5bluetooth5
               echo "QT_VERSION=5" >> $GITHUB_ENV
             }
           fi
         elif [ "${UBUNTU_VERSION}" = "22.04" ]; then
           # Ubuntu 22.04: Qt6 should be available
-          apt-get install -y qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6
+          apt-get install -y --no-install-recommends qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6
         else
           # Ubuntu 24.04: Latest Qt6
-          apt-get install -y qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6
+          apt-get install -y --no-install-recommends qt6-base-dev qt6-bluetooth-dev libqt6core6 libqt6bluetooth6
         fi
 
     - name: Install system libraries
       run: |
-        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get install -y --no-install-recommends \
           libudev-dev \
           libevdev-dev \
           doxygen \
@@ -87,6 +135,25 @@ jobs:
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
+    # Cache Qt6 dependencies
+    - name: Cache Qt6 dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          /usr/include/qt6
+          /usr/lib/x86_64-linux-gnu/qt6
+          /usr/lib/x86_64-linux-gnu/libQt6*
+        key: qt6-${{ matrix.ubuntu-version }}-${{ env.CACHE_VERSION }}
+
+    # Cache APT packages
+    - name: Cache APT packages
+      uses: actions/cache@v4
+      with:
+        path: /var/cache/apt
+        key: apt-${{ matrix.ubuntu-version }}-${{ hashFiles('.github/workflows/ci.yml') }}
+        restore-keys: |
+          apt-${{ matrix.ubuntu-version }}-
 
     - name: Setup build directory
       run: |
@@ -99,21 +166,43 @@ jobs:
         echo "=== CMake Configuration ==="
         echo "Build type: ${{ matrix.build-type }}"
         echo "Ubuntu version: ${{ matrix.ubuntu-version }}"
-        echo "Available Qt packages:"
-        dpkg -l | grep -i qt || echo "No Qt packages found"
         
+        # Cache CMake configuration
         cmake .. \
           -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
           -DBUILD_TESTS=ON \
           -DBUILD_DOCS=ON \
-          -DCMAKE_VERBOSE_MAKEFILE=ON
+          -DCMAKE_VERBOSE_MAKEFILE=ON \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+    # Cache build artifacts
+    - name: Cache build artifacts
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/
+          ~/.ccache
+        key: build-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}-${{ hashFiles('src/**', 'CMakeLists.txt') }}
+        restore-keys: |
+          build-${{ matrix.ubuntu-version }}-${{ matrix.build-type }}-
+          build-${{ matrix.ubuntu-version }}-
+
+    - name: Install ccache
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get install -y ccache
+        ccache --version
+        ccache --show-stats
 
     - name: Build
       run: |
         cd build
         echo "=== Starting Build ==="
         echo "Available cores: $(nproc)"
+        ccache --zero-stats
         make -j$(nproc) VERBOSE=1
+        ccache --show-stats
 
     - name: Run tests
       run: |
@@ -144,6 +233,7 @@ jobs:
           VERSION
         retention-days: 30
 
+  # Job 3: Code quality analysis (runs in parallel with build)
   code-quality:
     name: Code Quality Analysis
     runs-on: ubuntu-latest
@@ -153,7 +243,7 @@ jobs:
     steps:
     - name: Install dependencies
       run: |
-        apt-get update
+        apt-get update -qq
         DEBIAN_FRONTEND=noninteractive apt-get install -y \
           build-essential \
           cmake \
@@ -167,10 +257,20 @@ jobs:
           cppcheck \
           curl \
           ca-certificates \
-          software-properties-common
+          software-properties-common \
+          ccache
 
     - name: Checkout code
       uses: actions/checkout@v4
+
+    # Cache analysis tools and dependencies
+    - name: Cache analysis dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/cppcheck
+          ~/.cache/clang-tidy
+        key: analysis-deps-${{ env.CACHE_VERSION }}
 
     - name: Configure CMake for analysis
       run: |
@@ -179,7 +279,9 @@ jobs:
         cmake .. \
           -DCMAKE_BUILD_TYPE=Debug \
           -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-          -DBUILD_TESTS=ON
+          -DBUILD_TESTS=ON \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
     - name: Run cppcheck
       run: |
@@ -207,12 +309,13 @@ jobs:
     - name: Upload analysis results
       uses: actions/upload-artifact@v4
       with:
-        name: code-analysis
+        name: code-analysis-${{ github.sha }}
         path: |
           cppcheck-results.xml
           clang-tidy-results.txt
         retention-days: 30
 
+  # Job 4: Security scanning
   security-scan:
     name: Security Scanning
     runs-on: ubuntu-latest
@@ -220,14 +323,84 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Run CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
       with:
-        languages: cpp
+        languages: 'cpp'
+        queries: security-extended
 
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v3
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      continue-on-error: true
+      id: codeql
+
+    - name: Check for CodeQL vulnerabilities and create issue
+      if: failure() && steps.codeql.outcome == 'failure'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const title = `🚨 Security Vulnerability Detected - ${new Date().toISOString().split('T')[0]}`;
+          const body = `
+          ## Security Alert 🔒
+          
+          A security vulnerability has been detected in the codebase during automated scanning.
+          
+          **Details:**
+          - **Repository:** ${{ github.repository }}
+          - **Branch:** ${{ github.ref_name }}
+          - **Commit:** ${{ github.sha }}
+          - **Workflow:** ${{ github.workflow }}
+          - **Run ID:** ${{ github.run_id }}
+          
+          **Scan Results:**
+          CodeQL security analysis has identified potential security issues in the C++ code.
+          
+          **Next Steps:**
+          1. Review the [Security tab](https://github.com/${{ github.repository }}/security) for detailed findings
+          2. Check the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for more information
+          3. Address the identified vulnerabilities following security best practices
+          4. Re-run the security scan after applying fixes
+          
+          **Priority:** High 🔴
+          
+          ---
+          *This issue was automatically created by the CI/CD security pipeline.*
+          `;
+          
+          // Check if a similar issue already exists
+          const existingIssues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: ['security', 'vulnerability'],
+            state: 'open'
+          });
+          
+          const recentIssue = existingIssues.data.find(issue => 
+            issue.title.includes('Security Vulnerability Detected') && 
+            new Date(issue.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000) // Within 24 hours
+          );
+          
+          if (!recentIssue) {
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['security', 'vulnerability', 'automated', 'high-priority']
+            });
+            console.log('Created security vulnerability issue');
+          } else {
+            console.log('Recent security issue already exists, skipping creation');
+          }
+
+  # Job 5: Release creation (only on tags, depends on tests passing)
   create-release:
     name: Create Release
-    needs: [build-and-test, code-quality]
+    needs: [build-and-test, code-quality, security-scan]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
@@ -294,6 +467,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Job 6: Documentation deployment (only on main branch)
   deploy-docs:
     name: Deploy Documentation
     needs: [build-and-test]
@@ -316,4 +490,3 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./docs
         enable_jekyll: false
-        cname: # Add your custom domain if you have one

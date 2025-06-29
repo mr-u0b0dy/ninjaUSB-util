@@ -2,14 +2,16 @@ name: Quality Assurance
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [ '*' ]  # Run on all branches
   pull_request:
     branches: [ main, dev ]
 
 env:
   BUILD_TYPE: Release
+  CACHE_VERSION: v1
 
 jobs:
+  # Job 1: Code formatting check (fastest, runs first)
   code-formatting:
     name: Code Formatting Check
     runs-on: ubuntu-latest
@@ -19,7 +21,7 @@ jobs:
     steps:
     - name: Install dependencies
       run: |
-        apt-get update
+        apt-get update -qq
         apt-get install -y \
           clang-format \
           git \
@@ -31,11 +33,18 @@ jobs:
       with:
         fetch-depth: 0
 
+    # Cache clang-format
+    - name: Cache clang-format
+      uses: actions/cache@v4
+      with:
+        path: /usr/bin/clang-format
+        key: clang-format-${{ runner.os }}-${{ env.CACHE_VERSION }}
+
     - name: Check clang-format version
       run: |
         clang-format --version
         echo "Using clang-format configuration:"
-        cat .clang-format
+        cat .clang-format || echo "No .clang-format file found"
 
     - name: Run clang-format check
       run: |
@@ -52,23 +61,18 @@ jobs:
         echo "Found C++ files:"
         echo "$SOURCES"
         
-        # Check formatting
+        # Check formatting efficiently
         FORMATTING_ISSUES=false
         for file in $SOURCES; do
           echo "Checking: $file"
           
-          # Create formatted version
-          clang-format "$file" > "$file.formatted"
-          
-          # Compare with original
-          if ! diff -u "$file" "$file.formatted"; then
+          if ! clang-format --dry-run --Werror "$file" >/dev/null 2>&1; then
             echo "❌ $file is not properly formatted"
+            clang-format --dry-run "$file" 2>&1 | head -10
             FORMATTING_ISSUES=true
           else
             echo "✅ $file is properly formatted"
           fi
-          
-          rm "$file.formatted"
         done
         
         if [ "$FORMATTING_ISSUES" = true ]; then
@@ -82,6 +86,7 @@ jobs:
           echo "✅ All C++ files are properly formatted!"
         fi
 
+  # Job 2: Markdown linting (runs in parallel)
   markdown-linting:
     name: Markdown Linting
     runs-on: ubuntu-latest
@@ -94,6 +99,16 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '20'
+        cache: 'npm'
+
+    # Cache node_modules
+    - name: Cache node modules
+      uses: actions/cache@v4
+      with:
+        path: ~/.npm
+        key: npm-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-${{ env.CACHE_VERSION }}
+        restore-keys: |
+          npm-${{ runner.os }}-
 
     - name: Install markdownlint-cli2
       run: |
@@ -141,6 +156,7 @@ jobs:
         
         echo "✅ All Markdown files pass linting!"
 
+  # Job 3: Mermaid validation (runs in parallel)
   mermaid-validation:
     name: Mermaid Diagram Validation
     runs-on: ubuntu-latest
@@ -224,6 +240,346 @@ jobs:
           echo "✅ All Mermaid diagrams are valid!"
         fi
 
+  # Job 4: Copyright compliance check
+  copyright-check:
+    name: Copyright Compliance Check
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+
+    steps:
+    - name: Install dependencies
+      run: |
+        apt-get update -qq
+        apt-get install -y \
+          git \
+          curl \
+          ca-certificates \
+          python3 \
+          python3-pip \
+          grep \
+          find
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # Cache Python packages
+    - name: Cache Python packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: pip-copyright-${{ runner.os }}-${{ env.CACHE_VERSION }}
+        restore-keys: |
+          pip-copyright-${{ runner.os }}-
+
+    - name: Install copyright checker tools
+      run: |
+        pip3 install --user licensecheck
+
+    - name: Check copyright headers in source files
+      id: copyright-headers
+      run: |
+        echo "🔍 Checking copyright headers in source files..."
+        
+        # Define expected copyright patterns
+        CURRENT_YEAR=$(date +%Y)
+        COPYRIGHT_PATTERNS="Copyright.*[0-9]{4}|©.*[0-9]{4}|\(c\).*[0-9]{4}"
+        
+        missing_copyright=()
+        outdated_copyright=()
+        
+        # Check C++ source files
+        for file in $(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null || true); do
+          if [ -f "$file" ]; then
+            echo "Checking: $file"
+            
+            # Check if file has any copyright notice
+            if ! grep -iE "$COPYRIGHT_PATTERNS" "$file" >/dev/null 2>&1; then
+              missing_copyright+=("$file")
+              echo "  ❌ Missing copyright header"
+            else
+              # Check if copyright year is current or recent (within 2 years)
+              if ! grep -iE "(Copyright|©|\(c\)).*($((CURRENT_YEAR-1))|$CURRENT_YEAR)" "$file" >/dev/null 2>&1; then
+                outdated_copyright+=("$file")
+                echo "  ⚠️  Potentially outdated copyright year"
+              else
+                echo "  ✅ Copyright header looks good"
+              fi
+            fi
+          fi
+        done
+        
+        # Save results for issue creation
+        echo "missing-count=${#missing_copyright[@]}" >> $GITHUB_OUTPUT
+        echo "outdated-count=${#outdated_copyright[@]}" >> $GITHUB_OUTPUT
+        
+        if [ ${#missing_copyright[@]} -gt 0 ]; then
+          echo "copyright-issues=true" >> $GITHUB_OUTPUT
+          printf '%s\n' "${missing_copyright[@]}" > missing_copyright_files.txt
+          echo ""
+          echo "❌ Files missing copyright headers:"
+          printf '  %s\n' "${missing_copyright[@]}"
+        else
+          echo "copyright-issues=false" >> $GITHUB_OUTPUT
+        fi
+        
+        if [ ${#outdated_copyright[@]} -gt 0 ]; then
+          echo "outdated-copyright=true" >> $GITHUB_OUTPUT
+          printf '%s\n' "${outdated_copyright[@]}" > outdated_copyright_files.txt
+          echo ""
+          echo "⚠️  Files with potentially outdated copyright:"
+          printf '  %s\n' "${outdated_copyright[@]}"
+        else
+          echo "outdated-copyright=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # Overall status
+        if [ ${#missing_copyright[@]} -gt 0 ] || [ ${#outdated_copyright[@]} -gt 0 ]; then
+          echo "overall-status=failed" >> $GITHUB_OUTPUT
+          exit 1
+        else
+          echo "overall-status=passed" >> $GITHUB_OUTPUT
+          echo ""
+          echo "✅ All source files have proper copyright headers!"
+        fi
+
+    - name: Check for potential copyright violations
+      id: copyright-scan
+      run: |
+        echo "🔍 Scanning for potential copyright violations..."
+        
+        # Use licensecheck to scan for potential issues
+        violations_found=false
+        
+        # Check source files for suspicious patterns
+        suspicious_files=()
+        
+        for file in $(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null || true); do
+          # Look for patterns that might indicate copied code
+          if grep -l "TODO.*copyright\|FIXME.*copyright\|borrowed from\|copied from\|adapted from" "$file" 2>/dev/null; then
+            suspicious_files+=("$file")
+            violations_found=true
+          fi
+        done
+        
+        # Check for large blocks of commented code (might be copied)
+        echo "Checking for large commented code blocks..."
+        for file in $(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null || true); do
+          # Count consecutive comment lines
+          comment_block_size=$(awk '
+            /^[[:space:]]*\/\// { 
+              count++; 
+              if (count > max) max = count 
+            } 
+            !/^[[:space:]]*\/\// { 
+              count = 0 
+            } 
+            END { 
+              print max + 0 
+            }' "$file")
+          
+          if [ "$comment_block_size" -gt 50 ]; then
+            echo "  ⚠️  Large commented block ($comment_block_size lines) in $file"
+            suspicious_files+=("$file")
+          fi
+        done
+        
+        if [ "$violations_found" = true ] || [ ${#suspicious_files[@]} -gt 0 ]; then
+          echo "violations-found=true" >> $GITHUB_OUTPUT
+          printf '%s\n' "${suspicious_files[@]}" > suspicious_copyright_files.txt
+          echo ""
+          echo "⚠️  Potential copyright concerns found in:"
+          printf '  %s\n' "${suspicious_files[@]}"
+        else
+          echo "violations-found=false" >> $GITHUB_OUTPUT
+          echo "✅ No obvious copyright violations detected"
+        fi
+
+    - name: Generate copyright report
+      run: |
+        echo "📊 Generating copyright compliance report..."
+        
+        cat > copyright_report.md << EOF
+        # Copyright Compliance Report
+        
+        **Generated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        **Repository:** ${{ github.repository }}
+        **Branch:** ${{ github.ref_name }}
+        **Commit:** ${{ github.sha }}
+        
+        ## Summary
+        
+        - **Files Missing Copyright:** ${{ steps.copyright-headers.outputs.missing-count }}
+        - **Files with Outdated Copyright:** ${{ steps.copyright-headers.outputs.outdated-count }}
+        - **Potential Violations:** ${{ steps.copyright-scan.outputs.violations-found }}
+        
+        ## Expected Copyright Format
+        
+        All source files should include a copyright header similar to:
+        
+        \`\`\`cpp
+        /*
+         * Copyright (c) $(date +%Y) [Your Name/Organization]
+         * SPDX-License-Identifier: MIT
+         */
+        \`\`\`
+        
+        Or for single-line:
+        
+        \`\`\`cpp
+        // Copyright (c) $(date +%Y) [Your Name/Organization]
+        // SPDX-License-Identifier: MIT
+        \`\`\`
+        
+        ## Recommendations
+        
+        1. Add copyright headers to all source files
+        2. Update copyright years annually
+        3. Use SPDX license identifiers for clarity
+        4. Review any flagged files for potential copyright issues
+        
+        EOF
+
+    - name: Create issue for copyright violations
+      if: failure() && (steps.copyright-headers.outputs.copyright-issues == 'true' || steps.copyright-scan.outputs.violations-found == 'true')
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const title = `⚖️ Copyright Compliance Issues Detected - ${new Date().toISOString().split('T')[0]}`;
+          const missingCount = '${{ steps.copyright-headers.outputs.missing-count }}' || '0';
+          const outdatedCount = '${{ steps.copyright-headers.outputs.outdated-count }}' || '0';
+          const violationsFound = '${{ steps.copyright-scan.outputs.violations-found }}' === 'true';
+          
+          const currentYear = new Date().getFullYear();
+          
+          let issues = [];
+          if (missingCount > 0) {
+            issues.push(`- ${missingCount} source files missing copyright headers`);
+          }
+          if (outdatedCount > 0) {
+            issues.push(`- ${outdatedCount} source files with potentially outdated copyright years`);
+          }
+          if (violationsFound) {
+            issues.push(`- Potential copyright violations or concerns detected`);
+          }
+          
+          const body = `
+          ## Copyright Compliance Alert ⚖️©️
+          
+          The automated copyright compliance check has identified issues that require attention.
+          
+          **Issues Found:**
+          ${issues.map(issue => issue).join('\n')}
+          
+          **Repository Details:**
+          - **Repository:** ${{ github.repository }}
+          - **Branch:** ${{ github.ref_name }}
+          - **Commit:** ${{ github.sha }}
+          - **Workflow Run:** [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          **Required Actions:**
+          
+          ${missingCount > 0 ? `
+          ### 📝 Missing Copyright Headers
+          Add copyright headers to source files. Use this template:
+          
+          \`\`\`cpp
+          /*
+           * Copyright (c) ${currentYear} [Your Name/Organization]
+           * SPDX-License-Identifier: MIT
+           */
+          \`\`\`
+          
+          **Quick Fix Command:**
+          \`\`\`bash
+          # Add copyright header to files (update [Your Name] and license as needed)
+          for file in \$(cat missing_copyright_files.txt); do
+            echo "/*" > temp_header.txt
+            echo " * Copyright (c) ${currentYear} [Your Name]" >> temp_header.txt
+            echo " * SPDX-License-Identifier: MIT" >> temp_header.txt
+            echo " */" >> temp_header.txt
+            echo "" >> temp_header.txt
+            cat "\$file" >> temp_header.txt
+            mv temp_header.txt "\$file"
+          done
+          \`\`\`
+          ` : ''}
+          
+          ${outdatedCount > 0 ? `
+          ### 📅 Outdated Copyright Years
+          Update copyright years to ${currentYear} or use a range (e.g., 2020-${currentYear}).
+          
+          **Update Command:**
+          \`\`\`bash
+          # Update copyright years (adjust pattern as needed)
+          sed -i 's/Copyright (c) [0-9]\\{4\\}/Copyright (c) ${currentYear}/g' \$(cat outdated_copyright_files.txt)
+          \`\`\`
+          ` : ''}
+          
+          ${violationsFound ? `
+          ### ⚠️ Potential Copyright Violations
+          Review flagged files for:
+          - Large blocks of commented code
+          - TODO/FIXME comments about copyright
+          - References to "borrowed" or "copied" code
+          - Ensure all code is original or properly attributed
+          ` : ''}
+          
+          **Best Practices:**
+          1. 📋 Use consistent copyright format across all files
+          2. 📅 Update copyright years annually
+          3. 🏷️ Include SPDX license identifiers
+          4. 📖 Document any third-party code with proper attribution
+          5. ✅ Review all code additions for copyright compliance
+          
+          **Legal Priority:** High 🔴
+          
+          ---
+          *This issue was automatically created by the copyright compliance checker.*
+          `;
+          
+          // Check if a similar issue already exists
+          const existingIssues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: ['copyright', 'legal', 'compliance'],
+            state: 'open'
+          });
+          
+          const recentIssue = existingIssues.data.find(issue => 
+            issue.title.includes('Copyright Compliance Issues') && 
+            new Date(issue.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Within 7 days
+          );
+          
+          if (!recentIssue) {
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['copyright', 'legal', 'compliance', 'automated', 'high-priority']
+            });
+            console.log('Created copyright compliance issue');
+          } else {
+            console.log('Recent copyright compliance issue already exists, skipping creation');
+          }
+
+    - name: Upload copyright compliance artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: copyright-compliance-report-${{ github.sha }}
+        path: |
+          copyright_report.md
+          missing_copyright_files.txt
+          outdated_copyright_files.txt
+          suspicious_copyright_files.txt
+        retention-days: 30
+
+  # Job 5: Documentation quality check (renamed from Job 4)
   documentation-check:
     name: Documentation Quality Check
     runs-on: ubuntu-latest
@@ -401,7 +757,7 @@ jobs:
 
   quality-summary:
     name: Quality Summary
-    needs: [code-formatting, markdown-linting, mermaid-validation, documentation-check, link-checker]
+    needs: [code-formatting, markdown-linting, mermaid-validation, copyright-check, documentation-check, link-checker]
     runs-on: ubuntu-latest
     if: always()
 
@@ -415,12 +771,14 @@ jobs:
         CODE_FORMAT="${{ needs.code-formatting.result }}"
         MARKDOWN_LINT="${{ needs.markdown-linting.result }}"
         MERMAID_CHECK="${{ needs.mermaid-validation.result }}"
+        COPYRIGHT_CHECK="${{ needs.copyright-check.result }}"
         DOCS_CHECK="${{ needs.documentation-check.result }}"
         LINK_CHECK="${{ needs.link-checker.result }}"
         
         echo "🎨 Code Formatting: $CODE_FORMAT"
         echo "📝 Markdown Linting: $MARKDOWN_LINT"
         echo "📊 Mermaid Validation: $MERMAID_CHECK"
+        echo "⚖️  Copyright Compliance: $COPYRIGHT_CHECK"
         echo "📚 Documentation: $DOCS_CHECK"
         echo "🔗 Link Checking: $LINK_CHECK"
         echo ""
@@ -429,12 +787,22 @@ jobs:
         if [ "$CODE_FORMAT" = "success" ] && \
            [ "$MARKDOWN_LINT" = "success" ] && \
            [ "$MERMAID_CHECK" = "success" ] && \
+           [ "$COPYRIGHT_CHECK" = "success" ] && \
            [ "$DOCS_CHECK" = "success" ] && \
            [ "$LINK_CHECK" = "success" ]; then
           echo "✅ All quality checks passed!"
           echo "🚀 Code is ready for merge!"
         else
           echo "❌ Some quality checks failed!"
+          echo ""
+          echo "Failed checks require attention:"
+          [ "$CODE_FORMAT" != "success" ] && echo "  - 🎨 Code formatting needs fixing"
+          [ "$MARKDOWN_LINT" != "success" ] && echo "  - 📝 Markdown linting issues found"
+          [ "$MERMAID_CHECK" != "success" ] && echo "  - 📊 Mermaid diagram issues found"
+          [ "$COPYRIGHT_CHECK" != "success" ] && echo "  - ⚖️  Copyright compliance issues found"
+          [ "$DOCS_CHECK" != "success" ] && echo "  - 📚 Documentation issues found"
+          [ "$LINK_CHECK" != "success" ] && echo "  - 🔗 Link validation failed"
+          echo ""
           echo "Please review the failed checks above before merging."
           exit 1
         fi
