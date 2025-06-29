@@ -1,23 +1,66 @@
-# Documentation Overview
+# ninjaUSB-util Documentation
 
-This document provides an overview of the ninjaUSB-util documentation structure.
+This directory contains comprehensive documentation for the ninjaUSB-util project.
 
-## Documentation Structure
+## 📚 Documentation Index
 
-### Root Level
+### For Users
+- **[User Guide](USER_GUIDE.md)** - Installation, usage, and troubleshooting
 
-- **[README.md](../README.md)** - Quick start guide for users
-- **[CONTRIBUTING.md](../CONTRIBUTING.md)** - Quick start guide for contributors
-- **[VERSION](../VERSION)** - Single source of truth for version numbers
+### For Contributors
+- **[Contributing Guide](CONTRIBUTING.md)** - Complete development workflow and guidelines
+- **[Development Guide](DEVELOPMENT.md)** - Technical development setup and procedures
+- **[Testing Guide](TESTING.md)** - Testing procedures and quality assurance
+- **[Pull Request Template](pull_request_template.md)** - PR guidelines and checklist
 
-### doc/ Directory
+### For Maintainers
+- **[CI/CD Pipeline](PIPELINE.md)** - Pipeline documentation and troubleshooting
+- **[Architecture Guide](ARCHITECTURE.md)** - System architecture and design decisions
+- **[Versioning Guide](VERSIONING.md)** - Version management and release process
 
-- **[USER_GUIDE.md](USER_GUIDE.md)** - Complete user guide with installation,
-  usage, and troubleshooting
-- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Comprehensive development guide
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and design
-  documentation
-- **[TESTING.md](TESTING.md)** - Testing procedures and requirements
+### Project Information
+- **[Documentation Improvements](DOCUMENTATION_IMPROVEMENTS.md)** - Documentation enhancement tracking
+
+## 🗂️ Documentation Organization
+
+```
+doc/
+├── README.md                       # This index file
+├── USER_GUIDE.md                  # End-user documentation
+├── CONTRIBUTING.md                # Complete developer guide
+├── DEVELOPMENT.md                 # Technical development details
+├── TESTING.md                     # Testing procedures
+├── PIPELINE.md                    # CI/CD pipeline documentation
+├── ARCHITECTURE.md                # System design and architecture
+├── VERSIONING.md                  # Version management
+├── pull_request_template.md       # PR template and guidelines
+└── DOCUMENTATION_IMPROVEMENTS.md  # Documentation enhancements
+```
+
+## 🚀 Quick Links
+
+### New Contributors
+1. Start with [Contributing Guide](CONTRIBUTING.md) for complete setup
+2. Read [Development Guide](DEVELOPMENT.md) for technical details
+3. Check [Testing Guide](TESTING.md) before submitting PRs
+
+### Experienced Developers
+- [Pipeline Documentation](PIPELINE.md) for CI/CD details
+- [Architecture Guide](ARCHITECTURE.md) for system design
+- [Pull Request Template](pull_request_template.md) for submission guidelines
+
+### Users
+- [User Guide](USER_GUIDE.md) for installation and usage
+- [Project README](../README.md) for quick overview
+
+## 📝 Documentation Standards
+
+All documentation follows:
+- Markdown format with consistent styling
+- Clear headings and navigation
+- Code examples with proper syntax highlighting
+- Cross-references between related documents
+- Regular updates to maintain accuracy
 - **[VERSIONING.md](VERSIONING.md)** - Version management system details
 
 ## For Users

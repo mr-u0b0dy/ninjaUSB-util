@@ -53,6 +53,12 @@ sudo ./ninja_util
 - **[Testing](doc/TESTING.md)** - Testing procedures
 - **[Versioning](doc/VERSIONING.md)** - Version management
 
+### Developer Resources
+
+- **[Comprehensive Contributing Guide](doc/CONTRIBUTING.md)** - Complete development workflow
+- **[CI/CD Pipeline](doc/PIPELINE.md)** - Pipeline documentation and troubleshooting
+- **[Pull Request Template](doc/pull_request_template.md)** - PR guidelines and checklist
+
 ## Related Projects
 
 ### ninjaUSB - BLE to USB HID Bridge Firmware

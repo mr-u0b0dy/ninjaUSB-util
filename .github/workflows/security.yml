@@ -1,0 +1,133 @@
+name: Security & Dependency Scanning
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Monday at 6 AM UTC
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          pkg-config \
+          libudev-dev \
+          libevdev-dev \
+          qt6-base-dev \
+          qt6-bluetooth-dev
+
+    - name: Generate CMake dependency info
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  license-check:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check license headers
+      run: |
+        # Check that all source files have proper license headers
+        missing_headers=()
+        
+        for file in $(find src tests -name "*.cpp" -o -name "*.hpp"); do
+          if ! grep -q "SPDX-License-Identifier" "$file"; then
+            missing_headers+=("$file")
+          fi
+        done
+        
+        if [ ${#missing_headers[@]} -gt 0 ]; then
+          echo "❌ Files missing license headers:"
+          printf '%s\n' "${missing_headers[@]}"
+          exit 1
+        else
+          echo "✅ All source files have proper license headers"
+        fi
+
+    - name: Verify LICENSE file
+      run: |
+        if [ ! -f LICENSE ]; then
+          echo "❌ LICENSE file not found"
+          exit 1
+        fi
+        echo "✅ LICENSE file found"
+
+  supply-chain-security:
+    name: Supply Chain Security
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check for dependency confusion
+      run: |
+        # Check CMakeLists.txt for any suspicious external dependencies
+        if grep -i "fetchcontent\|externalproject" CMakeLists.txt; then
+          echo "🔍 External dependencies found - manual review recommended:"
+          grep -n -i "fetchcontent\|externalproject" CMakeLists.txt || true
+        else
+          echo "✅ No external dependencies detected in CMakeLists.txt"
+        fi
+
+    - name: Verify Git submodules (if any)
+      run: |
+        if [ -f .gitmodules ]; then
+          echo "🔍 Git submodules detected:"
+          cat .gitmodules
+          # Verify submodule URLs are from trusted sources
+          if grep -v "github.com\|gitlab.com" .gitmodules; then
+            echo "⚠️  Non-standard Git hosting detected - manual review recommended"
+          fi
+        else
+          echo "✅ No Git submodules found"
+        fi
+
+  secrets-scan:
+    name: Secrets Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Run TruffleHog OSS
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: main
+        head: HEAD
+        extra_args: --debug --only-verified

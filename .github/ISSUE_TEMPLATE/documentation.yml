@@ -1,0 +1,41 @@
+---
+name: 📚 Documentation Issue
+about: Report an issue with documentation
+title: '[DOCS] '
+labels: ['documentation', 'needs-triage']
+assignees: ''
+
+---
+
+## 📚 Documentation Issue
+What documentation needs improvement?
+
+## 📍 Location
+Where is the documentation issue located?
+- [ ] README.md
+- [ ] User Guide (doc/USER_GUIDE.md)
+- [ ] API Documentation (Doxygen)
+- [ ] Development Guide (doc/DEVELOPMENT.md)
+- [ ] Other: _______________
+
+## 🐛 Issue Type
+- [ ] Information is missing
+- [ ] Information is incorrect
+- [ ] Information is outdated
+- [ ] Information is unclear
+- [ ] Typo/grammar issue
+- [ ] Broken link
+- [ ] Missing examples
+- [ ] Other: _______________
+
+## 📝 Current Content
+What does the current documentation say? (copy/paste if possible)
+
+## ✨ Suggested Improvement
+What should the documentation say instead?
+
+## 🔗 Related Links
+Any related documentation or external resources?
+
+## 📋 Additional Context
+Any additional information that would help improve the documentation?

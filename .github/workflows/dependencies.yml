@@ -1,0 +1,166 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # Weekly on Monday at 8 AM UTC
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  update-dependencies:
+    name: Update Dependencies
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Check for Qt6 updates
+      run: |
+        echo "🔄 Checking for Qt6 updates..."
+        
+        # Check current Qt version requirements
+        if grep -q "qt6-base-dev" README.md; then
+          echo "Current Qt6 dependency found in README"
+        fi
+        
+        # Check latest Qt6 LTS versions
+        echo "Latest Qt6 LTS versions:"
+        curl -s https://download.qt.io/official_releases/qt/ | \
+          grep -o 'href="6\.[0-9][0-9]*/"' | \
+          sed 's/href="//g; s/"//g' | \
+          sort -V | tail -5
+
+    - name: Check for CMake updates
+      run: |
+        echo "🔄 Checking for CMake updates..."
+        
+        # Extract current CMake requirement
+        CURRENT_CMAKE=$(grep "cmake_minimum_required" CMakeLists.txt | grep -o "[0-9]\+\.[0-9]\+")
+        echo "Current CMake requirement: $CURRENT_CMAKE"
+        
+        # Check latest CMake version
+        LATEST_CMAKE=$(curl -s https://api.github.com/repos/Kitware/CMake/releases/latest | \
+          grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
+        echo "Latest CMake version: $LATEST_CMAKE"
+
+    - name: Check for GitHub Actions updates
+      run: |
+        echo "🔄 Checking for GitHub Actions updates..."
+        
+        # List current action versions
+        echo "Current GitHub Actions versions:"
+        grep -r "uses:" .github/workflows/ | \
+          sed 's/.*uses: //' | \
+          sort | uniq
+
+    - name: Create dependency update report
+      run: |
+        cat > dependency-report.md << EOF
+        # Dependency Update Report
+        
+        Generated on: $(date)
+        
+        ## System Dependencies
+        - Qt6 Base Development
+        - Qt6 Bluetooth
+        - libudev-dev
+        - libevdev-dev
+        - CMake
+        
+        ## GitHub Actions
+        EOF
+        
+        echo "Checking action versions..." >> dependency-report.md
+        grep -r "uses:" .github/workflows/ | \
+          sed 's/.*uses: /- /' >> dependency-report.md
+
+    - name: Check for security advisories
+      run: |
+        echo "🔐 Checking for security advisories..."
+        
+        # Use GitHub's advisory database API (if available)
+        # This is a placeholder for actual security checking
+        echo "Security check would be implemented here"
+
+    - name: Upload dependency report
+      uses: actions/upload-artifact@v4
+      with:
+        name: dependency-report
+        path: dependency-report.md
+        retention-days: 30
+
+  check-documentation:
+    name: Documentation Updates
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check documentation freshness
+      run: |
+        echo "📚 Checking documentation freshness..."
+        
+        # Check when documentation was last updated
+        for doc in doc/*.md; do
+          if [ -f "$doc" ]; then
+            echo "$(basename "$doc"): $(git log -1 --format="%ci" -- "$doc")"
+          fi
+        done
+
+    - name: Validate README links
+      run: |
+        echo "🔗 Validating README links..."
+        
+        # Extract URLs from README
+        grep -o 'https\?://[^)]*' README.md | while read url; do
+          echo "Checking: $url"
+          if curl -s --head "$url" | head -n 1 | grep -q "200 OK"; then
+            echo "✅ $url - OK"
+          else
+            echo "❌ $url - FAILED"
+          fi
+        done
+
+    - name: Check for outdated examples
+      run: |
+        echo "🔍 Checking for outdated examples..."
+        
+        # Look for version references in documentation
+        grep -r "version\|Version\|VERSION" doc/ | \
+          grep -v ".git" | \
+          head -10
+
+  lint-workflows:
+    name: Lint Workflows
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install actionlint
+      run: |
+        curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash
+        sudo mv actionlint /usr/local/bin/
+
+    - name: Lint GitHub Actions workflows
+      run: |
+        echo "🧹 Linting GitHub Actions workflows..."
+        actionlint .github/workflows/*.yml
+
+    - name: Check workflow syntax
+      run: |
+        echo "✅ Workflow syntax validation..."
+        for workflow in .github/workflows/*.yml; do
+          echo "Checking: $(basename "$workflow")"
+          # Basic YAML syntax check
+          python3 -c "import yaml; yaml.safe_load(open('$workflow'))"
+        done

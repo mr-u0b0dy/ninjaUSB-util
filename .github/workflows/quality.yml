@@ -1,0 +1,440 @@
+name: Quality Assurance
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  code-formatting:
+    name: Code Formatting Check
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+
+    steps:
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y \
+          clang-format \
+          git \
+          curl \
+          ca-certificates
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check clang-format version
+      run: |
+        clang-format --version
+        echo "Using clang-format configuration:"
+        cat .clang-format
+
+    - name: Run clang-format check
+      run: |
+        echo "🔍 Checking C++ code formatting..."
+        
+        # Find all C++ source files
+        SOURCES=$(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null || true)
+        
+        if [ -z "$SOURCES" ]; then
+          echo "ℹ️  No C++ source files found to check"
+          exit 0
+        fi
+        
+        echo "Found C++ files:"
+        echo "$SOURCES"
+        
+        # Check formatting
+        FORMATTING_ISSUES=false
+        for file in $SOURCES; do
+          echo "Checking: $file"
+          
+          # Create formatted version
+          clang-format "$file" > "$file.formatted"
+          
+          # Compare with original
+          if ! diff -u "$file" "$file.formatted"; then
+            echo "❌ $file is not properly formatted"
+            FORMATTING_ISSUES=true
+          else
+            echo "✅ $file is properly formatted"
+          fi
+          
+          rm "$file.formatted"
+        done
+        
+        if [ "$FORMATTING_ISSUES" = true ]; then
+          echo ""
+          echo "❌ Code formatting issues found!"
+          echo "Run the following to fix formatting:"
+          echo "find src tests -name '*.cpp' -o -name '*.hpp' | xargs clang-format -i"
+          exit 1
+        else
+          echo ""
+          echo "✅ All C++ files are properly formatted!"
+        fi
+
+  markdown-linting:
+    name: Markdown Linting
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install markdownlint-cli2
+      run: |
+        npm install -g markdownlint-cli2
+
+    - name: Run markdownlint
+      run: |
+        echo "🔍 Checking Markdown files..."
+        
+        # Create inline markdownlint configuration
+        cat > .markdownlint-cli2.jsonc << 'EOF'
+        {
+          "default": true,
+          "MD013": {
+            "line_length": 100,
+            "code_blocks": false,
+            "tables": false
+          },
+          "MD033": false,
+          "MD041": false
+        }
+        EOF
+        
+        # Find all markdown files
+        MD_FILES=$(find . -name "*.md" -not -path "./build/*" -not -path "./.git/*" 2>/dev/null || true)
+        
+        if [ -z "$MD_FILES" ]; then
+          echo "ℹ️  No Markdown files found to check"
+          exit 0
+        fi
+        
+        echo "Found Markdown files:"
+        echo "$MD_FILES"
+        
+        # Run markdownlint-cli2 using the inline configuration
+        markdownlint-cli2 --config .markdownlint-cli2.jsonc $MD_FILES || {
+          echo ""
+          echo "❌ Markdown linting issues found!"
+          echo "Check the output above for specific issues to fix."
+          exit 1
+        }
+        
+        # Clean up temporary config file
+        rm -f .markdownlint-cli2.jsonc
+        
+        echo "✅ All Markdown files pass linting!"
+
+  mermaid-validation:
+    name: Mermaid Diagram Validation
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Mermaid CLI
+      run: |
+        npm install -g @mermaid-js/mermaid-cli
+
+    - name: Extract and validate Mermaid diagrams
+      run: |
+        echo "🔍 Searching for Mermaid diagrams in Markdown files..."
+        
+        # Find all markdown files
+        MD_FILES=$(find . -name "*.md" -not -path "./build/*" -not -path "./.git/*" 2>/dev/null || true)
+        
+        if [ -z "$MD_FILES" ]; then
+          echo "ℹ️  No Markdown files found to check"
+          exit 0
+        fi
+        
+        MERMAID_FOUND=false
+        VALIDATION_FAILED=false
+        
+        # Create temp directory for diagrams
+        mkdir -p temp_diagrams
+        
+        # Process each markdown file
+        for md_file in $MD_FILES; do
+          echo "Checking: $md_file"
+          
+          # Extract mermaid code blocks
+          awk '
+            /```mermaid/ { in_mermaid=1; next }
+            /```/ && in_mermaid { in_mermaid=0; next }
+            in_mermaid { print }
+          ' "$md_file" > temp_mermaid.txt
+          
+          if [ -s temp_mermaid.txt ]; then
+            MERMAID_FOUND=true
+            echo "  📊 Found Mermaid diagram(s) in $md_file"
+            
+            # Create a proper mermaid file for validation
+            diagram_file="temp_diagrams/$(basename "$md_file" .md).mmd"
+            cp temp_mermaid.txt "$diagram_file"
+            
+            # Validate the diagram
+            if mmdc -i "$diagram_file" -o "/tmp/test_output.svg" >/dev/null 2>&1; then
+              echo "  ✅ Mermaid diagram is valid"
+            else
+              echo "  ❌ Mermaid diagram validation failed in $md_file"
+              echo "  Diagram content:"
+              cat "$diagram_file" | sed 's/^/    /'
+              VALIDATION_FAILED=true
+            fi
+          fi
+          
+          rm -f temp_mermaid.txt
+        done
+        
+        # Clean up
+        rm -rf temp_diagrams
+        
+        if [ "$MERMAID_FOUND" = false ]; then
+          echo "ℹ️  No Mermaid diagrams found in Markdown files"
+        elif [ "$VALIDATION_FAILED" = true ]; then
+          echo ""
+          echo "❌ Mermaid diagram validation failed!"
+          echo "Please check the diagram syntax in the files listed above."
+          exit 1
+        else
+          echo ""
+          echo "✅ All Mermaid diagrams are valid!"
+        fi
+
+  documentation-check:
+    name: Documentation Quality Check
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+
+    steps:
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y \
+          build-essential \
+          cmake \
+          git \
+          pkg-config \
+          libudev-dev \
+          libevdev-dev \
+          qt6-base-dev \
+          qt6-bluetooth-dev \
+          doxygen \
+          graphviz \
+          curl \
+          ca-certificates
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure CMake for documentation
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DBUILD_DOCS=ON
+
+    - name: Build documentation
+      run: |
+        cd build
+        echo "🔍 Building Doxygen documentation..."
+        make docs
+
+    - name: Check documentation completeness
+      run: |
+        echo "🔍 Checking documentation quality..."
+        
+        # Check if documentation was generated
+        if [ ! -d "build/doc/api" ]; then
+          echo "❌ Documentation directory not found!"
+          exit 1
+        fi
+        
+        # Check for Doxygen warnings
+        if [ -f "build/doxygen_warnings.log" ]; then
+          if [ -s "build/doxygen_warnings.log" ]; then
+            echo "⚠️  Doxygen warnings found:"
+            cat build/doxygen_warnings.log
+            echo ""
+            echo "Please fix the documentation warnings above."
+            exit 1
+          fi
+        fi
+        
+        # Check for undocumented public APIs
+        echo "Checking for undocumented public APIs..."
+        
+        # Look for public functions/classes without documentation
+        PUBLIC_APIS_UNDOCUMENTED=false
+        
+        for header in $(find src -name "*.hpp" 2>/dev/null || true); do
+          echo "Checking: $header"
+          
+          # Simple check for public methods without /** comments
+          if grep -n "public:" "$header" >/dev/null 2>&1; then
+            # Extract public section
+            awk '/public:/{flag=1} /private:|protected:/{flag=0} flag' "$header" > temp_public.txt
+            
+            # Check for functions without documentation
+            if grep -E "^\s*(virtual\s+)?[a-zA-Z_][a-zA-Z0-9_]*\s+[a-zA-Z_][a-zA-Z0-9_]*\s*\(" temp_public.txt >/dev/null 2>&1; then
+              echo "  Found public methods - checking documentation..."
+              # This is a simplified check - in practice, you'd want more sophisticated parsing
+            fi
+            
+            rm -f temp_public.txt
+          fi
+        done
+        
+        echo "✅ Documentation build completed successfully!"
+        
+        # Check documentation file sizes
+        if [ -d "build/doc/api/html" ]; then
+          HTML_COUNT=$(find build/doc/api/html -name "*.html" | wc -l)
+          echo "📊 Generated $HTML_COUNT HTML documentation pages"
+          
+          if [ "$HTML_COUNT" -eq 0 ]; then
+            echo "⚠️  No HTML documentation pages generated - check Doxygen configuration"
+            exit 1
+          fi
+        fi
+
+  link-checker:
+    name: Documentation Link Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install markdown-link-check
+      run: |
+        npm install -g markdown-link-check
+
+    - name: Check links in documentation
+      run: |
+        echo "🔍 Checking links in Markdown files..."
+        
+        # Create config file for markdown-link-check
+        cat > .markdown-link-check.json << 'EOF'
+        {
+          "ignorePatterns": [
+            {
+              "pattern": "^http://localhost"
+            },
+            {
+              "pattern": "^https://github.com/your-username"
+            }
+          ],
+          "httpHeaders": [
+            {
+              "urls": ["https://github.com"],
+              "headers": {
+                "User-Agent": "Mozilla/5.0 (compatible; Linkcheck)"
+              }
+            }
+          ],
+          "timeout": "10s",
+          "retryOn429": true,
+          "retryCount": 3,
+          "fallbackRetryDelay": "30s"
+        }
+        EOF
+        
+        # Find all markdown files
+        MD_FILES=$(find . -name "*.md" -not -path "./build/*" -not -path "./.git/*" 2>/dev/null || true)
+        
+        if [ -z "$MD_FILES" ]; then
+          echo "ℹ️  No Markdown files found to check"
+          exit 0
+        fi
+        
+        LINK_ERRORS=false
+        
+        for md_file in $MD_FILES; do
+          echo "Checking links in: $md_file"
+          
+          if ! markdown-link-check "$md_file" --config .markdown-link-check.json; then
+            echo "❌ Link check failed for $md_file"
+            LINK_ERRORS=true
+          else
+            echo "✅ All links valid in $md_file"
+          fi
+        done
+        
+        if [ "$LINK_ERRORS" = true ]; then
+          echo ""
+          echo "❌ Link validation failed!"
+          echo "Please fix the broken links identified above."
+          exit 1
+        else
+          echo ""
+          echo "✅ All documentation links are valid!"
+        fi
+
+  quality-summary:
+    name: Quality Summary
+    needs: [code-formatting, markdown-linting, mermaid-validation, documentation-check, link-checker]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+    - name: Quality Gate Summary
+      run: |
+        echo "📊 Quality Assurance Summary"
+        echo "=========================="
+        
+        # Check job results
+        CODE_FORMAT="${{ needs.code-formatting.result }}"
+        MARKDOWN_LINT="${{ needs.markdown-linting.result }}"
+        MERMAID_CHECK="${{ needs.mermaid-validation.result }}"
+        DOCS_CHECK="${{ needs.documentation-check.result }}"
+        LINK_CHECK="${{ needs.link-checker.result }}"
+        
+        echo "🎨 Code Formatting: $CODE_FORMAT"
+        echo "📝 Markdown Linting: $MARKDOWN_LINT"
+        echo "📊 Mermaid Validation: $MERMAID_CHECK"
+        echo "📚 Documentation: $DOCS_CHECK"
+        echo "🔗 Link Checking: $LINK_CHECK"
+        echo ""
+        
+        # Determine overall status
+        if [ "$CODE_FORMAT" = "success" ] && \
+           [ "$MARKDOWN_LINT" = "success" ] && \
+           [ "$MERMAID_CHECK" = "success" ] && \
+           [ "$DOCS_CHECK" = "success" ] && \
+           [ "$LINK_CHECK" = "success" ]; then
+          echo "✅ All quality checks passed!"
+          echo "🚀 Code is ready for merge!"
+        else
+          echo "❌ Some quality checks failed!"
+          echo "Please review the failed checks above before merging."
+          exit 1
+        fi

@@ -1,0 +1,275 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ubuntu-version: [20.04, 22.04, 24.04]
+        build-type: [Debug, Release]
+        include:
+          - ubuntu-version: 20.04
+            qt-version: "6.2.*"
+          - ubuntu-version: 22.04
+            qt-version: "6.4.*"
+          - ubuntu-version: 24.04
+            qt-version: "6.6.*"
+
+    container:
+      image: ubuntu:${{ matrix.ubuntu-version }}
+
+    steps:
+    - name: Install system dependencies
+      run: |
+        apt-get update
+        apt-get install -y \
+          build-essential \
+          cmake \
+          git \
+          pkg-config \
+          libudev-dev \
+          libevdev-dev \
+          qt6-base-dev \
+          qt6-bluetooth-dev \
+          libqt6core6 \
+          libqt6bluetooth6 \
+          doxygen \
+          graphviz \
+          curl \
+          ca-certificates
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup build directory
+      run: |
+        mkdir -p build
+        cd build
+
+    - name: Configure CMake
+      run: |
+        cd build
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
+          -DBUILD_TESTS=ON \
+          -DBUILD_DOCS=ON
+
+    - name: Build
+      run: |
+        cd build
+        make -j$(nproc)
+
+    - name: Run tests
+      run: |
+        cd build
+        ctest --output-on-failure --verbose
+
+    - name: Build documentation
+      if: matrix.ubuntu-version == '24.04' && matrix.build-type == 'Release'
+      run: |
+        cd build
+        make docs
+
+    - name: Upload documentation artifacts
+      if: matrix.ubuntu-version == '24.04' && matrix.build-type == 'Release'
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation
+        path: build/doc/api/
+        retention-days: 30
+
+    - name: Upload build artifacts
+      if: matrix.build-type == 'Release'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ninja_util-ubuntu-${{ matrix.ubuntu-version }}
+        path: |
+          build/ninja_util
+          VERSION
+        retention-days: 30
+
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+
+    steps:
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y \
+          build-essential \
+          cmake \
+          git \
+          pkg-config \
+          libudev-dev \
+          libevdev-dev \
+          qt6-base-dev \
+          qt6-bluetooth-dev \
+          clang-tidy \
+          cppcheck \
+          curl \
+          ca-certificates
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure CMake for analysis
+      run: |
+        mkdir build
+        cd build
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DBUILD_TESTS=ON
+
+    - name: Run cppcheck
+      run: |
+        cppcheck \
+          --enable=all \
+          --error-exitcode=1 \
+          --suppress=missingIncludeSystem \
+          --suppress=unusedFunction \
+          --suppress=unmatchedSuppression \
+          --inline-suppr \
+          --project=build/compile_commands.json \
+          --xml \
+          --output-file=cppcheck-results.xml \
+          2>&1 || true
+
+    - name: Run clang-tidy
+      run: |
+        cd build
+        clang-tidy ../src/*.cpp \
+          -p . \
+          --checks=-*,readability-*,performance-*,modernize-*,bugprone-* \
+          --format-style=file \
+          2>&1 | tee ../clang-tidy-results.txt || true
+
+    - name: Upload analysis results
+      uses: actions/upload-artifact@v4
+      with:
+        name: code-analysis
+        path: |
+          cppcheck-results.xml
+          clang-tidy-results.txt
+        retention-days: 30
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        languages: cpp
+
+  create-release:
+    name: Create Release
+    needs: [build-and-test, code-quality]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts/
+
+    - name: Read VERSION file
+      id: version
+      run: echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
+
+    - name: Create Release Notes
+      id: release_notes
+      run: |
+        echo "Creating release for version ${{ steps.version.outputs.version }}"
+        
+        # Extract version from tag
+        TAG_VERSION=${GITHUB_REF#refs/tags/v}
+        
+        # Create release notes
+        cat > release_notes.md << EOF
+        # ninjaUSB-util v${TAG_VERSION}
+        
+        ## What's New
+        - USB keyboard to BLE forwarding utility
+        - Multi-keyboard support with hot-plug detection
+        - Cross-platform Linux distribution support
+        
+        ## Downloads
+        - **Ubuntu 20.04**: Download \`ninja_util-ubuntu-20.04\`
+        - **Ubuntu 22.04**: Download \`ninja_util-ubuntu-22.04\`
+        - **Ubuntu 24.04**: Download \`ninja_util-ubuntu-24.04\`
+        
+        ## Installation
+        \`\`\`bash
+        # Extract and install
+        chmod +x ninja_util
+        sudo mv ninja_util /usr/local/bin/
+        \`\`\`
+        
+        ## Usage
+        \`\`\`bash
+        sudo ninja_util --help
+        \`\`\`
+        
+        See the [User Guide](https://github.com/\${{ github.repository }}/blob/main/doc/USER_GUIDE.md) for detailed instructions.
+        EOF
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/ninja_util-ubuntu-*/ninja_util
+          artifacts/documentation/**/*
+        body_path: release_notes.md
+        draft: false
+        prerelease: ${{ contains(github.ref, '-') }}
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-docs:
+    name: Deploy Documentation
+    needs: [build-and-test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download documentation
+      uses: actions/download-artifact@v4
+      with:
+        name: documentation
+        path: docs/
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs
+        enable_jekyll: false
+        cname: # Add your custom domain if you have one

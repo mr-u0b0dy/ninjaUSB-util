@@ -7,46 +7,73 @@ We welcome contributions! Here's how to get started quickly:
 1. **Fork** the repository on GitHub
 2. **Clone** your fork locally
 3. **Create a branch**: `git checkout -b feature/your-feature-name`
-4. **Build with tests**: `cmake .. -DBUILD_TESTS=ON && make`
-5. **Run tests**: `ctest`
-6. **Make your changes** and test them
-7. **Submit a pull request**
+4. **Build with tests**: `mkdir build && cd build && cmake .. -DBUILD_TESTS=ON && ninja`
+5. **Test your changes**: `ctest`
+6. **Submit a Pull Request** with a clear description
 
-## Code Style
+## Development Guidelines
 
-- Use C++17 features appropriately
-- Follow existing code formatting
-- Add clear comments and proper error handling
-- Use the logger utility instead of std::cout
-- Add SPDX license headers to new files
-- Add unit tests for new functionality
+- Follow the existing code style (see `.clang-format`)
+- Add tests for new functionality
+- Update documentation as needed
+- Ensure all CI checks pass
 
-## Testing
+## 📚 Detailed Documentation
 
-Run all tests before submitting:
+For comprehensive development guidelines, see **[doc/CONTRIBUTING.md](doc/CONTRIBUTING.md)** which includes:
 
+- 🛠️ Complete development environment setup
+- 🧪 Testing procedures and coverage guidelines  
+- 📝 Coding standards and style requirements
+- 🔍 Code quality tools and static analysis
+- 🚀 Release process and versioning
+- 🐛 Bug reporting templates
+- ✨ Feature request guidelines
+
+## Additional Resources
+
+- **[Development Guide](doc/DEVELOPMENT.md)** - Technical development details
+- **[Testing Guide](doc/TESTING.md)** - Testing procedures and guidelines
+- **[Pipeline Documentation](doc/PIPELINE.md)** - CI/CD pipeline details
+- **[User Guide](doc/USER_GUIDE.md)** - End-user documentation
+
+## Quick Reference
+
+### Building
 ```bash
-# Build with tests
+mkdir build && cd build
 cmake .. -DBUILD_TESTS=ON
-make
-
-# Run all tests
-ctest
+make -j$(nproc)
 ```
 
-## Documentation
+### Testing
+```bash
+ctest --output-on-failure
+```
 
-For detailed information, see:
+### Development Tools
+```bash
+# Install development dependencies (Ubuntu/Debian)
+sudo apt update && sudo apt install -y \
+  cmake qt6-base-dev qt6-bluetooth-dev \
+  libudev-dev libevdev-dev build-essential \
+  clang-tidy cppcheck valgrind doxygen graphviz
 
-- **[Development Guide](doc/DEVELOPMENT.md)** - Comprehensive development setup
-  and guidelines
-- **[Testing Guide](doc/TESTING.md)** - Detailed testing procedures and checklist
-- **[Versioning Guide](doc/VERSIONING.md)** - Version management system
+# Install Node.js tools for documentation quality
+npm install -g markdownlint-cli2 @mermaid-js/mermaid-cli markdown-link-check
 
-## Questions?
+# Individual quality checks (CI will run comprehensive checks)
+clang-format --dry-run --Werror src/*.cpp src/inc/*.hpp
+markdownlint-cli2 *.md doc/*.md
 
-- Open an issue for discussion
-- Start with small bug fixes or documentation improvements
-- Ask for guidance on larger features before implementing
+# Memory check
+cd build && valgrind --tool=memcheck --leak-check=full ./test_device_manager
+```
 
-Thank you for contributing!
+## Getting Help
+
+- 📚 Check existing documentation first
+- 🔍 Search [existing issues](https://github.com/your-username/ninjaUSB-util/issues)
+- 💬 Ask questions in [GitHub Discussions](https://github.com/your-username/ninjaUSB-util/discussions)
+
+Thank you for contributing! 🚀
