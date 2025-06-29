@@ -1,4 +1,4 @@
-name: Weekly Maintenance
+name: Weekly Security & Dependency Scan
 
 on:
   schedule:
@@ -8,6 +8,11 @@ on:
     inputs:
       force_dependency_update:
         description: 'Force dependency update check'
+        required: false
+        default: false
+        type: boolean
+      force_security_scan:
+        description: 'Force comprehensive security scan'
         required: false
         default: false
         type: boolean

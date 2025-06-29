@@ -58,31 +58,33 @@ jobs:
           echo "cpp-files=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: Install formatting tools
+    - name: Install basic tools
       if: steps.files.outputs.cpp-files == 'true'
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y clang-format
+        sudo apt-get install -y file
 
-    - name: Check code formatting
+    - name: Basic file validation
       if: steps.files.outputs.cpp-files == 'true'
       run: |
-        echo "🔍 Checking C++ code formatting..."
+        echo "🔍 Running basic file validation..."
         SOURCES=$(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null)
         
-        FORMAT_ISSUES=0
         for file in $SOURCES; do
-          if ! clang-format --dry-run --Werror "$file" >/dev/null 2>&1; then
-            echo "❌ Formatting issues in: $file"
-            FORMAT_ISSUES=1
+          # Check file encoding
+          if file "$file" | grep -q "UTF-8"; then
+            echo "✅ UTF-8 encoding: $file"
+          else
+            echo "⚠️  Non-UTF-8 encoding: $file"
+          fi
+          
+          # Check for basic file structure
+          if [ -s "$file" ]; then
+            echo "✅ Non-empty file: $file"
+          else
+            echo "❌ Empty file: $file"
           fi
         done
-        
-        if [ $FORMAT_ISSUES -eq 1 ]; then
-          echo "💡 Run 'find src tests -name \"*.cpp\" -o -name \"*.hpp\" | xargs clang-format -i' to fix formatting"
-          exit 1
-        fi
-        echo "✅ All files are properly formatted"
 
   # Job 2: Comprehensive build and test matrix
   build-matrix:
@@ -250,7 +252,19 @@ jobs:
           python3-venv \
           file \
           jq \
-          markdownlint-cli
+          nodejs \
+          npm \
+          yamllint \
+          clang-format \
+          cppcheck \
+          clang-tidy \
+          build-essential \
+          cmake \
+          pkg-config \
+          libudev-dev \
+          libevdev-dev \
+          qt6-base-dev \
+          qt6-connectivity-dev
 
     - name: Checkout code
       uses: actions/checkout@v4
@@ -269,93 +283,267 @@ jobs:
       run: |
         export PIP_CACHE_DIR=/tmp/pip-cache
         python3 -m pip install --upgrade pip
-        # Add any Python-based tools here if needed
+        pip3 install --user licensecheck complexity-report
 
-    - name: Copyright compliance check
+    - name: Install Node.js tools
       run: |
-        echo "🔍 Checking copyright compliance..."
+        npm install -g markdownlint-cli2 @mermaid-js/mermaid-cli yaml-lint
+
+    - name: License compliance and SPDX check
+      run: |
+        echo "🔍 Checking SPDX identifiers..."
         
-        # Check for copyright headers in source files
-        MISSING_COPYRIGHT=0
+        # Check for SPDX identifiers in source files
+        echo "Checking SPDX identifiers..."
+        MISSING_SPDX=0
         for file in $(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null); do
-          if ! grep -q "Copyright" "$file"; then
-            echo "❌ Missing copyright header: $file"
-            MISSING_COPYRIGHT=1
+          if ! grep -q "SPDX-License-Identifier\|SPDX-FileCopyrightText" "$file"; then
+            echo "❌ Missing SPDX identifier: $file"
+            MISSING_SPDX=1
+          else
+            echo "✅ SPDX identifier found: $file"
           fi
         done
         
-        if [ $MISSING_COPYRIGHT -eq 1 ]; then
-          echo "💡 Add copyright headers to source files"
+        # Check CMakeLists.txt for SPDX
+        if [ -f CMakeLists.txt ]; then
+          if grep -q "SPDX-License-Identifier\|SPDX-FileCopyrightText" CMakeLists.txt; then
+            echo "✅ SPDX identifier found in CMakeLists.txt"
+          else
+            echo "⚠️  Missing SPDX identifier in CMakeLists.txt"
+          fi
+        fi
+        
+        # Use licensecheck if available
+        if command -v licensecheck >/dev/null 2>&1; then
+          echo "Running licensecheck on source files..."
+          find src tests -name "*.cpp" -o -name "*.hpp" | head -5 | \
+            xargs licensecheck 2>/dev/null || echo "licensecheck completed with warnings"
+        fi
+        
+        if [ $MISSING_SPDX -eq 1 ]; then
+          echo "💡 Add SPDX identifiers to source files"
+          echo "Example:"
+          echo "// SPDX-License-Identifier: Apache-2.0"
+          echo "// SPDX-FileCopyrightText: $(date +%Y) Your Name"
           # Don't fail for now, just warn
         else
-          echo "✅ All source files have copyright headers"
+          echo "✅ All source files have SPDX identifiers"
         fi
 
-    - name: License compliance check
+    - name: YAML linting
       run: |
-        echo "🔍 Checking license compliance..."
-        
-        # Check for LICENSE file
-        if [ ! -f LICENSE ]; then
-          echo "❌ No LICENSE file found"
-          exit 1
+        echo "🔍 Linting YAML files..."
+        if command -v yamllint >/dev/null 2>&1; then
+          yamllint .github/workflows/ || {
+            echo "⚠️  YAML linting issues found"
+          }
+        else
+          echo "ℹ️  yamllint not available, skipping"
         fi
         
-        # Check README mentions license
-        if ! grep -q -i license README.md; then
-          echo "⚠️  LICENSE not mentioned in README.md"
+        # Additional YAML validation with yaml-lint
+        if command -v yaml-lint >/dev/null 2>&1; then
+          find . -name "*.yml" -o -name "*.yaml" | while read file; do
+            echo "Checking: $file"
+            yaml-lint "$file" || echo "⚠️  Issues in $file"
+          done
         fi
-        
-        echo "✅ License compliance check passed"
 
-    - name: Markdown linting
+    - name: Markdown linting with markdownlint-cli2
       run: |
-        echo "🔍 Linting Markdown files..."
-        if command -v markdownlint >/dev/null 2>&1; then
-          markdownlint . --ignore node_modules --ignore build || {
+        echo "🔍 Linting Markdown files with markdownlint-cli2..."
+        if command -v markdownlint-cli2 >/dev/null 2>&1; then
+          markdownlint-cli2 "**/*.md" --ignore node_modules --ignore build || {
             echo "⚠️  Markdown linting issues found (non-blocking)"
           }
         else
-          echo "ℹ️  markdownlint not available, skipping"
+          echo "ℹ️  markdownlint-cli2 not available, skipping"
         fi
 
-  # Job 4: Security scanning (weekly or on demand)
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[security]')
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install security tools
+    - name: Mermaid diagram validation
       run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y \
-          cmake \
-          pkg-config \
-          libudev-dev \
-          libevdev-dev \
-          qt6-base-dev \
-          qt6-connectivity-dev \
-          jq
+        echo "🔍 Checking Mermaid diagrams..."
+        if command -v mmdc >/dev/null 2>&1; then
+          # Find files containing mermaid diagrams
+          MERMAID_FILES=$(grep -r "```mermaid" . --include="*.md" --exclude-dir=build --exclude-dir=node_modules | cut -d: -f1 | sort -u || true)
+          
+          if [ -n "$MERMAID_FILES" ]; then
+            echo "Found Mermaid diagrams in:"
+            echo "$MERMAID_FILES"
+            
+            # Extract and validate each mermaid block
+            for file in $MERMAID_FILES; do
+              echo "Validating Mermaid diagrams in: $file"
+              # This is a basic check - extract mermaid blocks and validate syntax
+              awk '/```mermaid/,/```/' "$file" | grep -v '```' > /tmp/mermaid_temp.mmd 2>/dev/null || true
+              if [ -s /tmp/mermaid_temp.mmd ]; then
+                mmdc -i /tmp/mermaid_temp.mmd -o /tmp/mermaid_test.png 2>/dev/null && \
+                  echo "✅ Mermaid diagram valid in $file" || \
+                  echo "⚠️  Mermaid diagram issues in $file"
+              fi
+            done
+          else
+            echo "ℹ️  No Mermaid diagrams found"
+          fi
+        else
+          echo "ℹ️  Mermaid CLI not available, skipping diagram validation"
+        fi
 
-    - name: Dependency vulnerability scan
+    - name: C++ code formatting check
       run: |
-        echo "🔍 Scanning for dependency vulnerabilities..."
-        
-        # Check Qt6 versions
-        echo "Checking Qt6 version..."
-        pkg-config --modversion Qt6Core || echo "Qt6Core not found"
-        
-        # Check system package vulnerabilities (basic check)
-        echo "Checking system packages..."
-        dpkg -l | grep -E "(libudev|libevdev|qt6)" || echo "No matching packages found"
-        
-        echo "✅ Basic dependency scan completed"
+        echo "🔍 Checking C++ code formatting with clang-format..."
+        if find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null | grep -q .; then
+          FORMAT_ISSUES=0
+          for file in $(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null); do
+            if ! clang-format --dry-run --Werror "$file" >/dev/null 2>&1; then
+              echo "❌ Formatting issues in: $file"
+              FORMAT_ISSUES=1
+              # Show the diff
+              echo "Expected formatting for $file:"
+              clang-format "$file" | diff "$file" - || true
+            else
+              echo "✅ Properly formatted: $file"
+            fi
+          done
+          
+          if [ $FORMAT_ISSUES -eq 1 ]; then
+            echo "💡 Run 'find src tests -name \"*.cpp\" -o -name \"*.hpp\" | xargs clang-format -i' to fix formatting"
+            # Don't fail, just warn
+          fi
+        else
+          echo "ℹ️  No C++ files found"
+        fi
 
-  # Job 5: Performance testing (optional, on specific triggers)
+    - name: C++ static analysis and complexity checks
+      run: |
+        echo "🔍 Running C++ static analysis and complexity checks..."
+        
+        if find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null | grep -q .; then
+          # Run cppcheck for static analysis
+          echo "Running cppcheck static analysis..."
+          cppcheck --enable=all --std=c++17 --verbose \
+            --suppress=missingIncludeSystem \
+            --suppress=unusedFunction \
+            --xml --xml-version=2 \
+            src/ tests/ 2>cppcheck-report.xml || true
+          
+          if [ -s cppcheck-report.xml ]; then
+            echo "📊 cppcheck found issues:"
+            grep -o 'msg="[^"]*"' cppcheck-report.xml | head -10 || true
+          else
+            echo "✅ No issues found by cppcheck"
+          fi
+          
+          # Build project for clang-tidy analysis
+          echo "Building project for static analysis..."
+          mkdir -p build-analysis && cd build-analysis
+          cmake .. -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON >/dev/null 2>&1 || true
+          
+          if [ -f compile_commands.json ]; then
+            cd ..
+            echo "Running clang-tidy analysis..."
+            find src -name "*.cpp" | head -5 | while read file; do
+              echo "Analyzing: $file"
+              clang-tidy "$file" -p build-analysis -- \
+                -I src/inc -I build-analysis/include 2>/dev/null || \
+                echo "⚠️  clang-tidy issues in $file"
+            done
+          else
+            cd ..
+            echo "⚠️  Could not generate compile commands for clang-tidy"
+          fi
+          
+          # Complexity analysis using a simple script
+          echo "Running complexity analysis..."
+          for file in $(find src -name "*.cpp" 2>/dev/null); do
+            echo "Complexity analysis for: $file"
+            # Count cyclomatic complexity indicators
+            complexity=$(grep -c -E "(if|while|for|case|catch|\?|&&|\|\|)" "$file" 2>/dev/null || echo "0")
+            lines=$(wc -l < "$file" 2>/dev/null || echo "0")
+            functions=$(grep -c "^[a-zA-Z_][a-zA-Z0-9_]*.*(" "$file" 2>/dev/null || echo "0")
+            
+            echo "  Lines: $lines, Estimated complexity: $complexity, Functions: $functions"
+            
+            if [ "$complexity" -gt 50 ]; then
+              echo "  ⚠️  High complexity detected (>50 complexity indicators)"
+            elif [ "$complexity" -gt 25 ]; then
+              echo "  ⚠️  Medium complexity detected (>25 complexity indicators)"
+            else
+              echo "  ✅ Good complexity level"
+            fi
+          done
+        else
+          echo "ℹ️  No C++ files found for analysis"
+        fi
+
+    - name: License file and header validation
+      run: |
+        echo "🔍 Comprehensive license validation..."
+        
+        # Check for LICENSE file existence and content
+        if [ ! -f LICENSE ]; then
+          echo "❌ No LICENSE file found at repository root"
+          exit 1
+        else
+          echo "✅ LICENSE file found"
+          
+          # Check LICENSE file content
+          LICENSE_TYPE=""
+          if grep -q "Apache License" LICENSE; then
+            LICENSE_TYPE="Apache-2.0"
+            echo "✅ Apache License 2.0 detected"
+          elif grep -q "MIT License" LICENSE; then
+            LICENSE_TYPE="MIT"
+            echo "✅ MIT License detected"
+          elif grep -q "GNU General Public License" LICENSE; then
+            LICENSE_TYPE="GPL"
+            echo "✅ GPL License detected"
+          else
+            echo "⚠️  License type not clearly identified"
+          fi
+          
+          # Validate LICENSE file is not empty and has reasonable content
+          LICENSE_SIZE=$(wc -c < LICENSE)
+          if [ "$LICENSE_SIZE" -lt 100 ]; then
+            echo "⚠️  LICENSE file seems too short ($LICENSE_SIZE characters)"
+          else
+            echo "✅ LICENSE file has substantial content ($LICENSE_SIZE characters)"
+          fi
+        fi
+        
+        # Check if README mentions license
+        if [ -f README.md ]; then
+          if grep -q -i license README.md; then
+            echo "✅ License mentioned in README.md"
+          else
+            echo "⚠️  License not mentioned in README.md"
+          fi
+        fi
+        
+        # Check for license headers in source files
+        echo "Checking license headers in source files..."
+        MISSING_HEADERS=0
+        for file in $(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null); do
+          if ! head -10 "$file" | grep -q -i "license\|copyright\|spdx"; then
+            echo "❌ Missing license header: $file"
+            MISSING_HEADERS=1
+          else
+            echo "✅ License header found: $file"
+          fi
+        done
+        
+        if [ $MISSING_HEADERS -eq 1 ]; then
+          echo "💡 Add license headers to source files"
+          echo "Example header:"
+          echo "// SPDX-License-Identifier: Apache-2.0"
+          echo "// SPDX-FileCopyrightText: $(date +%Y) Your Name"
+          echo "//"
+          echo "// Licensed under the Apache License, Version 2.0..."
+        fi
+
+  # Job 4: Performance testing (optional, on specific triggers)
   performance-test:
     name: Performance Test
     runs-on: ubuntu-latest

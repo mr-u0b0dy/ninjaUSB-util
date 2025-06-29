@@ -21,12 +21,8 @@ Thank you for your interest in contributing to ninjaUSB-util! This document prov
 
 ### Setup Development Environment
 ```bash
-# Install dependencies (Ubuntu/Debian)
-sudo apt update && sudo apt install -y \
-  cmake qt6-base-dev qt6-bluetooth-dev \
-  libudev-dev libevdev-dev build-essential \
-  git pkg-config clang-tidy cppcheck valgrind \
-  doxygen graphviz clang-format
+# Install dependencies
+sudo apt install cmake qt6-base-dev qt6-bluetooth-dev libudev-dev libevdev-dev
 
 # Clone and build
 git clone https://github.com/YOUR_USERNAME/ninjaUSB-util.git

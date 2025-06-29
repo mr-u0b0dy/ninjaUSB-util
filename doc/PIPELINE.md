@@ -1,294 +1,250 @@
 # 🚀 CI/CD Pipeline Documentation
 
-This document describes the streamlined and optimized CI/CD pipeline for ninjaUSB-util, featuring consolidated workflows, advanced caching, and comprehensive security scanning.
+This document describes the comprehensive CI/CD pipeline setup for ninjaUSB-util.
 
 ## 📋 Pipeline Overview
 
-The CI/CD pipeline has been completely redesigned for efficiency and maintainability:
+The CI/CD pipeline consists of multiple GitHub Actions workflows that provide:
 
-- ✅ **Consolidated Workflows**: Reduced from 7 to 3 workflows (73% reduction in complexity)
-- 🔍 **Integrated Quality**: All quality checks in main CI pipeline
-- 🛡️ **Enhanced Security**: Weekly vulnerability scanning with comprehensive reporting
-- 📚 **Smart Execution**: Conditional jobs based on file changes and triggers
-- 🚀 **Optimized Performance**: Parallel execution with intelligent caching
-- 🔧 **Automated Maintenance**: Weekly dependency and security updates
+- ✅ **Continuous Integration**: Automated building and testing
+- 🔍 **Quality Assurance**: Code analysis, formatting, and security scanning  
+- 📚 **Documentation**: Automated documentation generation and deployment
+- 🚀 **Deployment**: Automated releases and artifact publishing
+- 🔧 **Maintenance**: Dependency updates and performance monitoring
 
-## ⚡ Performance Optimizations
-
-### Advanced Caching Strategy
-- **APT Package Caching**: Standardized across all workflows for consistency
-- **Qt6 Dependencies**: Unified Qt6 package installation (`qt6-base-dev qt6-connectivity-dev`)
-- **ccache Integration**: Dramatically reduces C++ compilation times
-- **Build Artifact Caching**: Smart cache keys based on source file hashes
-- **Python Package Caching**: Optimized security tool installation
-
-### Parallel Execution & Smart Conditionals
-- **Parallel Jobs**: Independent jobs run simultaneously for faster feedback
-- **File Change Detection**: Skip builds when only documentation changes
-- **Conditional Security**: Security scans only run weekly or on-demand
-- **Performance Testing**: Triggered by `[perf]` commit message or schedule
-
-## 🔧 Workflow Structure
+## 🔧 Workflow Files
 
 ### 1. Main CI/CD Pipeline (`.github/workflows/ci.yml`)
 
-**Primary workflow** that handles all core CI/CD functionality.
-
-**Triggers:** 
-- Push to `main`, `dev`, `feature/*` branches
-- Pull requests to `main`/`dev`
-- Tags starting with `v*`
-- Manual dispatch with debug options
+**Triggers:** Push to `main`/`develop`, Pull requests, Tags starting with `v*`
 
 **Jobs:**
-
-#### 1.1 Quick Validation (`quick-checks`)
-- **Purpose**: Fast feedback loop for immediate issues
-- **Features**:
-  - File change detection (skip builds for doc-only changes)
-  - C++ code formatting validation
-  - Smart build triggering
-- **Runtime**: ~30 seconds
-
-#### 1.2 Build & Test Matrix (`build-matrix`)
-- **Purpose**: Comprehensive build testing across platforms
-- **Matrix Strategy**:
-  - Ubuntu 22.04 (Qt6.4) & 24.04 (Qt6.6)
-  - Release builds (all platforms) + Debug build (Ubuntu 24.04)
-  - Conditional testing and documentation generation
-- **Features**:
-  - Advanced caching (APT, ccache, build artifacts)
-  - Static analysis integration (cppcheck, clang-tidy)
-  - Automated documentation generation
-  - Artifact management with retention policies
-- **Runtime**: ~5-15 minutes (depending on cache hits)
-
-#### 1.3 Quality & Compliance (`quality-compliance`)
-- **Purpose**: Integrated code quality and compliance checking
-- **Features**:
-  - Copyright header validation
-  - License compliance verification
-  - Markdown linting
-  - Basic security pattern detection
-- **Runtime**: ~2-3 minutes
-
-#### 1.4 Security Scan (`security-scan`)
-- **Purpose**: On-demand security analysis
-- **Triggers**: Weekly schedule, manual dispatch, `[security]` in commit message
-- **Features**:
-  - Basic dependency vulnerability scanning
-  - Qt6 version security assessment
-  - System package analysis
-- **Runtime**: ~3-5 minutes
-
-#### 1.5 Performance Test (`performance-test`)
-- **Purpose**: Optional performance validation
-- **Triggers**: `[perf]` in commit message or weekly schedule
-- **Features**:
-  - Memory leak detection with Valgrind
-  - Performance timing measurements
-  - Resource usage analysis
-- **Runtime**: ~5-10 minutes
-
-#### 1.6 Release Preparation (`release`)
-- **Purpose**: Automated release asset preparation
-- **Triggers**: Only on version tags (`v*`)
-- **Features**:
-  - Multi-platform binary collection
-  - Documentation packaging
-  - Release artifact creation
-- **Runtime**: ~2-3 minutes
-
-### 2. Weekly Maintenance (`.github/workflows/weekly-maintenance.yml`)
-
-**Scheduled maintenance** for dependency updates and comprehensive security scanning.
-
-**Triggers:**
-- Weekly schedule (Monday 6 AM UTC)
-- Manual dispatch with force options
-
-**Jobs:**
-
-#### 2.1 Dependency Updates (`dependency-updates`)
-- **Purpose**: Monitor for dependency updates
-- **Features**:
-  - Qt6 version checking
-  - CMake update monitoring
-  - Ubuntu LTS version tracking
-  - Security advisory alerts
-- **Runtime**: ~2-3 minutes
-
-#### 2.2 Vulnerability Scanning (`vulnerability-scan`)
-- **Purpose**: Comprehensive security analysis
-- **Features**:
-  - **System Package Scanning**: Ubuntu package vulnerability assessment
-  - **Dependency Analysis**: Python/Qt6/CMake security checks
-  - **Source Code Analysis**: Static security pattern detection with Semgrep
-  - **Memory Safety**: C++ unsafe function detection
-  - **Container Security**: Base image vulnerability assessment
-  - **Reporting**: Detailed vulnerability reports with severity classification
-- **Tools Used**: Safety, Bandit, Semgrep, custom security patterns
-- **Runtime**: ~10-15 minutes
-
-#### 2.3 Cleanup & Maintenance (`cleanup-actions`)
-- **Purpose**: Repository health monitoring
-- **Features**:
-  - Workflow file health checks
-  - Large file detection
-  - Binary file monitoring
-  - Documentation freshness validation
-- **Runtime**: ~1-2 minutes
-
-#### 2.4 Performance Baseline (`performance-baseline`)
-- **Purpose**: Weekly performance monitoring
-- **Features**:
-  - Build time measurement
-  - Binary size tracking
-  - Runtime performance baseline
-- **Runtime**: ~3-5 minutes
-
-### 3. Copyright & License Check (`.github/workflows/copyright.yml`)
-
-**Streamlined compliance checking** focused on legal compliance.
-
-**Triggers:**
-- Weekly schedule (Monday 4 AM UTC)
-- Manual dispatch
+- **build-and-test**: Multi-platform builds (Ubuntu 20.04, 22.04, 24.04) with Debug/Release configurations
+- **code-quality**: Static analysis with clang-tidy and cppcheck  
+- **security-scan**: CodeQL security analysis
+- **create-release**: Automated releases from version tags
+- **deploy-docs**: GitHub Pages documentation deployment
 
 **Features:**
-- **Copyright Header Analysis**: Missing and outdated copyright detection
-- **License Compliance**: LICENSE file validation and README verification
-- **Third-party License Check**: Dependency license scanning
-- **Compliance Reporting**: Detailed reports with recommendations
-- **Artifact Management**: 30-day retention for compliance reports
+- Matrix builds across Ubuntu versions and build types
+- Comprehensive test execution with `ctest`
+- Documentation generation with Doxygen
+- Binary artifact uploads for each platform
+- Automated release creation from Git tags
 
-## 🔄 Migration from Legacy Workflows
+### 2. Security & Dependencies (`.github/workflows/security.yml`)
 
-### Deprecated Workflows (moved to `.github/workflows/deprecated/`)
-- `old-ci.yml` - Original CI pipeline (529 lines)
-- `quality.yml` - Standalone quality checks (879 lines)
-- `build-check.yml` - Separate build validation (210 lines)
-- `security.yml` - Standalone security scanning (402 lines)
-- `performance.yml` - Separate performance testing (232 lines)
-- `dependencies.yml` - Standalone dependency updates (175 lines)
+**Triggers:** Weekly schedule (Monday 6 AM), Push to `main`, Pull requests
 
-### Key Improvements
-- **Reduced Complexity**: 7 workflows → 3 workflows
-- **Eliminated Duplication**: Single Qt6 installation pattern across all workflows
-- **Standardized Caching**: Consistent caching strategy with optimized keys
-- **Unified Error Handling**: Consistent error reporting and recovery
-- **Smart Execution**: Conditional jobs reduce unnecessary resource usage
+**Jobs:**
+- **dependency-scan**: Trivy vulnerability scanning
+- **license-check**: License header compliance verification
+- **supply-chain-security**: Dependency security analysis
+- **secrets-scan**: TruffleHog secret detection
 
-## 📊 Performance Metrics
+### 3. Performance & Analysis (`.github/workflows/performance.yml`)
 
-### Before Consolidation
-- **Total Workflow Lines**: ~2,905 lines across 7 files
-- **Qt6 Installation**: Repeated 6 times with different package sets
-- **Cache Strategy**: Inconsistent across workflows
-- **Execution Time**: Sequential execution in many cases
+**Triggers:** Push to `main`, Pull requests, Weekly schedule (Monday 2 AM)
 
-### After Consolidation
-- **Total Workflow Lines**: ~800 lines across 3 files (73% reduction)
-- **Qt6 Installation**: Single standardized pattern
-- **Cache Strategy**: Unified with optimized keys
-- **Execution Time**: 40-60% faster through parallelization
+**Jobs:**
+- **performance-test**: Memory leak detection with Valgrind, CPU profiling, binary size analysis
+- **static-analysis**: Include What You Use (IWYU), dead code detection, coverage analysis
 
-## 🛠️ Special Triggers
+### 4. Maintenance (`.github/workflows/dependencies.yml`)
 
-Use these patterns in commit messages for special behavior:
+**Triggers:** Weekly schedule (Monday 8 AM), Manual trigger
 
-- `[security]` - Trigger security scanning in main CI
-- `[perf]` - Run performance tests in main CI
-- `[skip ci]` - Skip CI entirely (use sparingly)
+**Jobs:**
+- **update-dependencies**: Qt6/CMake version checks, GitHub Actions updates
+- **check-documentation**: Documentation freshness validation, broken link detection
+- **lint-workflows**: GitHub Actions workflow linting with actionlint
 
-## 🚨 Security Features
+## 🛠️ Development Tools
 
-### Vulnerability Scanning Capabilities
-- **Multi-layer Analysis**: System, dependency, and source code scanning
-- **Severity Classification**: Critical, High, Medium severity tracking
-- **Comprehensive Reporting**: Detailed vulnerability reports with remediation guidance
-- **Alert System**: Critical vulnerability notifications
-- **Trend Analysis**: Weekly baseline tracking
+### Makefile
+A comprehensive Makefile provides convenient commands:
 
-### Security Tools Integration
-- **Safety**: Python dependency vulnerability scanning
-- **Semgrep**: Source code security pattern analysis
-- **Bandit**: Python security issue detection
-- **Custom Patterns**: C++ memory safety and unsafe function detection
+```bash
+make help           # Show all available commands
+make build          # Build the project
+make test           # Run all tests
+make dev-setup      # Install development dependencies
+make lint           # Run static analysis
+make memory-check   # Run Valgrind memory checking
+make docs           # Build documentation
+make ci-test        # Run full CI test suite locally
+```
 
-## 📈 Monitoring & Maintenance
+### Code Quality Tools
 
-### Weekly Automated Checks
-- Dependency update monitoring
-- Security vulnerability scanning
-- Performance baseline capture
-- Repository health assessment
-- Documentation freshness validation
+- **clang-format**: Consistent code formatting (`.clang-format`)
+- **clang-tidy**: Static analysis and modernization suggestions
+- **cppcheck**: Additional static analysis
+- **Valgrind**: Memory leak detection and profiling
+- **Doxygen**: API documentation generation
 
-### Quarterly Review Items
-- Workflow efficiency analysis
-- Cache hit rate optimization
-- Security tool updates
-- Performance baseline trends
+### Development Environment
 
-## 🔧 Troubleshooting
+- **VS Code DevContainer**: Pre-configured development environment with all tools
+- **GitHub Codespaces**: Cloud-based development environment
+- **Docker support**: Containerized builds and testing
+
+## 📊 Quality Gates
+
+Every pull request must pass:
+
+1. ✅ **Build**: Successful compilation on all target platforms
+2. ✅ **Tests**: All unit tests pass with no failures
+3. ✅ **Static Analysis**: No critical issues from clang-tidy/cppcheck
+4. ✅ **Security**: No security vulnerabilities detected
+5. ✅ **Memory**: No memory leaks detected by Valgrind
+6. ✅ **Documentation**: All public APIs documented
+
+## 🚀 Release Process
+
+### Automated Releases
+
+1. **Version Update**: Update `VERSION` file with new version
+2. **Tag Creation**: Create and push Git tag (e.g., `git tag v1.2.3`)
+3. **Automatic Build**: Pipeline builds binaries for all platforms
+4. **Release Creation**: GitHub release created with:
+   - Binary artifacts for Ubuntu 20.04, 22.04, 24.04
+   - Generated documentation
+   - Automated release notes
+   - Distribution packages
+
+### Manual Release Steps
+
+```bash
+# 1. Update version
+echo "1.2.3" > VERSION
+
+# 2. Commit and tag
+git add VERSION
+git commit -m "Release v1.2.3"
+git tag v1.2.3
+
+# 3. Push (triggers release workflow)
+git push origin main
+git push origin v1.2.3
+```
+
+## 🔍 Monitoring & Alerts
+
+### Performance Monitoring
+- Weekly performance benchmarks
+- Binary size tracking
+- Memory usage analysis
+- Startup time measurements
+
+### Security Monitoring  
+- Weekly vulnerability scans
+- Dependency security updates
+- Secret detection in commits
+- License compliance checking
+
+### Quality Monitoring
+- Code coverage tracking
+- Static analysis trend monitoring
+- Documentation coverage
+- Test result trending
+
+## 🐛 Troubleshooting
 
 ### Common Issues
 
 **Build Failures:**
-1. Check Qt6 package availability on Ubuntu version
-2. Verify CMake compatibility with Qt6 version
-3. Clear cache if dependency issues persist
+- Check Qt6 dependencies are installed
+- Verify CMake version (>= 3.20)
+- Ensure all system packages are available
 
-**Cache Issues:**
-1. Cache keys are based on file hashes - changes invalidate cache
-2. APT cache issues: Clear with updated cache version
-3. ccache not working: Verify compiler launcher configuration
+**Test Failures:**
+- Run tests locally: `make test-verbose`
+- Check for memory leaks: `make memory-check`
+- Review test logs in CI artifacts
 
 **Security Scan Failures:**
-1. Tool installation issues: Check Python package availability
-2. False positives: Review and update scan configurations
-3. Network issues: Verify external tool access
+- Review Trivy vulnerability report
+- Update dependencies if needed
+- Add suppressions for false positives
 
-### Emergency Procedures
+**Documentation Build Issues:**
+- Ensure Doxygen is installed
+- Check for syntax errors in comments
+- Verify external dependencies are available
 
-**Rollback to Legacy Workflows:**
+### Local Testing
+
+Run the full CI suite locally:
 ```bash
-cd .github/workflows
-mv deprecated/old-ci.yml ci.yml
-mv deprecated/*.yml .
-rm weekly-maintenance.yml copyright.yml
+make ci-test
 ```
 
-**Disable Specific Jobs:**
-Add conditions to job definitions:
-```yaml
-if: false  # Temporarily disable job
-```
+This executes the same checks as the CI pipeline.
+
+## 📈 Metrics & Analytics
+
+### Build Metrics
+- Build time trends across platforms
+- Success/failure rates
+- Resource usage patterns
+
+### Code Quality Metrics
+- Lines of code trends
+- Test coverage percentage
+- Issue density (bugs per KLOC)
+- Technical debt indicators
+
+### Security Metrics
+- Vulnerability discovery rate
+- Time to remediation
+- Dependency freshness
+- License compliance rate
+
+## 🔧 Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `.github/workflows/ci.yml` | Main CI/CD pipeline |
+| `.github/workflows/security.yml` | Security scanning |
+| `.github/workflows/performance.yml` | Performance testing |
+| `.github/workflows/dependencies.yml` | Maintenance automation |
+| `doc/CONTRIBUTING.md` | Contribution guidelines |
+| `.github/pull_request_template.md` | PR template |
+| `.github/ISSUE_TEMPLATE/` | Issue templates |
+| `.devcontainer/devcontainer.json` | Dev container configuration |
+| `.clang-format` | Code formatting rules |
+| `Makefile` | Build automation |
+
+## 🎯 Future Enhancements
+
+### Planned Improvements
+- [ ] ARM64 build support
+- [ ] Windows build support (cross-compilation)
+- [ ] Automated dependency updates (Dependabot)
+- [ ] Performance regression detection
+- [ ] Automated security patching
+- [ ] Integration with package managers (APT, Snap)
+- [ ] Container image publishing
+- [ ] Multi-architecture Docker builds
+
+### Metrics Dashboard
+Consider implementing:
+- Build success rate dashboard
+- Code quality trend visualization  
+- Security posture monitoring
+- Performance benchmark tracking
 
 ## 📞 Support
 
 For pipeline issues:
-1. Check workflow run logs in GitHub Actions
-2. Review this documentation
-3. Consult deprecated workflows for legacy patterns
-4. Create issue with `pipeline` label
+1. Check [GitHub Actions logs](https://github.com/your-username/ninjaUSB-util/actions)
+2. Review [troubleshooting guide](#troubleshooting)
+3. Open an issue with `ci` label
+4. Contact maintainers via GitHub Discussions
 
 ---
 
-**Last Updated**: June 2025  
-**Review Schedule**: Quarterly  
-**Next Review**: September 2025
-2. 🚨 Review automatically created issues (security, copyright, license)
-3. 📁 Download artifacts for detailed reports and remediation scripts
-4. 📋 Follow troubleshooting guides above
-5. 🎫 Open an issue with `ci`, `pipeline`, or `build` labels
-
----
-
-**Pipeline Status:** ✅ **Optimized and Enhanced**  
-**Performance:** 🚀 **Up to 90% faster builds with caching**  
-**Security:** 🛡️ **Automatic vulnerability detection and reporting**  
-**Compliance:** ⚖️ **Comprehensive copyright and license tracking**  
-**Last Updated:** $(date +"%Y-%m-%d")  
+**Pipeline Status:** ✅ Active and Monitoring
+**Last Updated:** $(date)
 **Next Review:** Quarterly
