@@ -7,6 +7,7 @@
  */
 
 #include <cassert>
+#include <ios>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -16,11 +17,14 @@
 namespace {
 // Helper to create argc/argv from vector of strings
 std::pair<int, char**> make_argv(const std::vector<std::string>& args) {
+    static std::vector<std::string> stored_args;  // Store actual strings
     static std::vector<char*> argv_ptrs;
+    
+    stored_args = args;  // Copy the strings to ensure they persist
     argv_ptrs.clear();
-    argv_ptrs.reserve(args.size());
+    argv_ptrs.reserve(stored_args.size());
 
-    for (const auto& arg : args) {
+    for (auto& arg : stored_args) {
         argv_ptrs.push_back(const_cast<char*>(arg.c_str()));
     }
 
@@ -92,9 +96,42 @@ void test_scan_timeout_option() {
 
 void test_invalid_option() {
     std::cout << "Testing invalid option handling... ";
-    // Note: This test is disabled for now due to test environment issues
-    // The functionality works correctly in the actual application
-    std::cout << "SKIPPED (test environment issue)\n";
+
+    // Test unknown flag
+    auto [argc1, argv1] = make_argv({"ninja_util", "--unknown-flag"});
+    args::ArgumentParser parser1(argc1, argv1);
+    
+    // Capture stderr temporarily to avoid cluttering test output
+    std::cerr.setstate(std::ios_base::failbit);
+    auto opts1 = parser1.parse();
+    std::cerr.clear();
+    
+    // Should return nullopt for unknown options
+    assert(!opts1.has_value());
+
+    // Test invalid timeout value (out of range)
+    auto [argc2, argv2] = make_argv({"ninja_util", "--scan-timeout", "100000"});
+    args::ArgumentParser parser2(argc2, argv2);
+    
+    std::cerr.setstate(std::ios_base::failbit);
+    auto opts2 = parser2.parse();
+    std::cerr.clear();
+    
+    // Should return nullopt for out-of-range values
+    assert(!opts2.has_value());
+
+    // Test invalid log level
+    auto [argc3, argv3] = make_argv({"ninja_util", "--log-level", "invalid"});
+    args::ArgumentParser parser3(argc3, argv3);
+    
+    std::cerr.setstate(std::ios_base::failbit);
+    auto opts3 = parser3.parse();
+    std::cerr.clear();
+    
+    // Should return nullopt for invalid log levels
+    assert(!opts3.has_value());
+
+    std::cout << "PASSED\n";
 }
 
 void test_log_level_option() {
