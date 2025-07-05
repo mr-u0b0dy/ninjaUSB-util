@@ -139,13 +139,6 @@ auto make_report_writer(QLowEnergyService* service, QLowEnergyCharacteristic ch)
         // Convert HID report to QByteArray and transmit
         QByteArray data(reinterpret_cast<const char*>(report.data()), 8);
         service->writeCharacteristic(ch, data, QLowEnergyService::WriteWithoutResponse);
-
-        if (g_options.verbose) {
-            LOG_DEBUG("Sent HID report: " + std::to_string(report[0]) + " " +
-                      std::to_string(report[2]) + " " + std::to_string(report[3]) + " " +
-                      std::to_string(report[4]) + " " + std::to_string(report[5]) + " " +
-                      std::to_string(report[6]) + " " + std::to_string(report[7]));
-        }
     };
 }
 
@@ -291,7 +284,12 @@ int main(int argc, char* argv[]) {
     }
 
     // Configure logging
-    logging::Logger::set_level(g_options.log_level);
+    if (g_options.verbose) {
+        // Enable debug level logging in verbose mode
+        logging::Logger::set_level("debug");
+    } else {
+        logging::Logger::set_level(g_options.log_level);
+    }
     logging::Logger::enable_timestamps(g_options.verbose);
 
     if (g_options.verbose) {
@@ -312,7 +310,9 @@ int main(int argc, char* argv[]) {
     }
 
     LOG_INFO("Found " + std::to_string(keyboard_manager.device_count()) + " keyboard(s)");
-    LOG_DEBUG("Monitoring keyboards (hot-plug supported)...");
+    if (g_options.verbose) {
+        LOG_DEBUG("Monitoring keyboards (hot-plug supported)...");
+    }
 
     hid::KeyboardState kb_state;
 
@@ -402,11 +402,15 @@ int main(int argc, char* argv[]) {
 
         QObject::connect(controller, &QLowEnergyController::serviceDiscovered,
                          [&](const QBluetoothUuid& uuid) {
-                             LOG_DEBUG("Service discovered: " + uuid.toString().toStdString());
+                             if (g_options.verbose) {
+                                 LOG_DEBUG("Service discovered: " + uuid.toString().toStdString());
+                             }
                          });
 
         QObject::connect(controller, &QLowEnergyController::discoveryFinished, [&]() {
-            LOG_DEBUG("Service discovery finished");
+            if (g_options.verbose) {
+                LOG_DEBUG("Service discovery finished");
+            }
             // Pick first service and search for writable char
             for (const QBluetoothUuid& uuid : controller->services()) {
                 service = controller->createServiceObject(uuid);
@@ -492,6 +496,9 @@ int main(int argc, char* argv[]) {
                     // Send empty report to release all keys before exit
                     if (sendReport) {
                         sendReport({0, 0, 0, 0, 0, 0, 0, 0});
+                        if (g_options.verbose) {
+                            LOG_DEBUG("Sent empty HID report before exit");
+                        }
                     }
                     LOG_INFO("Stopping HID reports and exiting...");
                     g_running = false;
@@ -507,7 +514,19 @@ int main(int argc, char* argv[]) {
                     case 1:  // key down
                     case 2:  // auto-repeat
                         if (hid::apply_key_event(kb_state, ev.code, ev.value)) {
-                            sendReport(kb_state.get_report());
+                            auto report = kb_state.get_report();
+                            sendReport(report);
+                            if (g_options.verbose) {
+                                LOG_DEBUG("Sent HID report: [" + 
+                                         std::to_string(report[0]) + ", " + 
+                                         std::to_string(report[1]) + ", " + 
+                                         std::to_string(report[2]) + ", " + 
+                                         std::to_string(report[3]) + ", " + 
+                                         std::to_string(report[4]) + ", " + 
+                                         std::to_string(report[5]) + ", " + 
+                                         std::to_string(report[6]) + ", " + 
+                                         std::to_string(report[7]) + "]");
+                            }
                         }
                         break;
                     case 0:  // key release
@@ -515,6 +534,9 @@ int main(int argc, char* argv[]) {
                             hid::apply_key_event(kb_state, ev.code, ev.value);
                         // Send all-zero release report to stop the key
                         sendReport({0, 0, 0, 0, 0, 0, 0, 0});
+                        if (g_options.verbose) {
+                            LOG_DEBUG("Sent key release HID report: [0, 0, 0, 0, 0, 0, 0, 0]");
+                        }
                         break;
                 }
             }

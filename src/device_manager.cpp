@@ -128,7 +128,7 @@ KeyboardDevice::KeyboardDevice(const std::string& device_path)
     const char* dev_name = libevdev_get_name(evdev_);
     name_ = dev_name ? dev_name : "Unknown Device";
 
-    log_info("Added keyboard: " + path_ + " (" + name_ + ")");
+    log_debug("Added keyboard: " + path_ + " (" + name_ + ")");
 }
 
 /**
@@ -205,7 +205,7 @@ void KeyboardDevice::cleanup() noexcept {
     if (fd_ >= 0) {
         close(fd_);
         fd_ = INVALID_FD;
-        log_info("Removed keyboard: " + path_);
+        log_debug("Removed keyboard: " + path_);
     }
 }
 
