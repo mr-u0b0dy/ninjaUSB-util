@@ -81,10 +81,10 @@ namespace args {
  * - Intervals: Must be >= 1ms to prevent excessive CPU usage
  */
 struct Options {
-    bool show_help = false;     //!< Display help message and exit
-    bool show_version = false;  //!< Display version information and exit
-    bool verbose = false;       //!< Enable verbose logging with timestamps
-    bool list_devices = false;  //!< List available BLE devices and exit
+    bool show_help = false;             //!< Display help message and exit
+    bool show_version = false;          //!< Display version information and exit
+    bool verbose = false;               //!< Enable verbose logging with timestamps
+    bool list_devices = false;          //!< List available BLE devices and exit
     bool disable_auto_connect = false;  //!< Disable automatic connection to single NinjaUSB device
     int scan_timeout = 10000;   //!< BLE device scanning timeout in milliseconds (default: 10s)
     int poll_interval = 1;      //!< Input device polling interval in milliseconds (default: 1ms)

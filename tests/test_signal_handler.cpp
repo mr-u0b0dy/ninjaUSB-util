@@ -6,10 +6,10 @@
  * @copyright SPDX-FileCopyrightText: 2025 Dharun A P
  */
 
+#include <atomic>
 #include <cassert>
 #include <csignal>
 #include <iostream>
-#include <atomic>
 
 // We need to replicate the signal handling logic for testing
 // since the actual signal_handler is in main.cpp
@@ -20,7 +20,7 @@ void test_signal_handler(int signum) {
         // Ignore Ctrl+C to prevent accidental program termination during key capture
         return;
     }
-    
+
     // For other signals, stop running
     g_running_test = false;
 }
@@ -29,37 +29,37 @@ namespace {
 
 void test_sigint_ignored() {
     std::cout << "Testing SIGINT is ignored... ";
-    
+
     g_running_test = true;
     test_signal_handler(SIGINT);
-    
+
     // SIGINT should be ignored, so g_running_test should remain true
     assert(g_running_test == true);
-    
+
     std::cout << "PASSED\n";
 }
 
 void test_sigterm_handled() {
     std::cout << "Testing SIGTERM stops execution... ";
-    
+
     g_running_test = true;
     test_signal_handler(SIGTERM);
-    
+
     // SIGTERM should set g_running_test to false
     assert(g_running_test == false);
-    
+
     std::cout << "PASSED\n";
 }
 
 void test_other_signals_handled() {
     std::cout << "Testing other signals stop execution... ";
-    
+
     g_running_test = true;
     test_signal_handler(SIGUSR1);
-    
+
     // Other signals should set g_running_test to false
     assert(g_running_test == false);
-    
+
     std::cout << "PASSED\n";
 }
 

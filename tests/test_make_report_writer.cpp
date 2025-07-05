@@ -6,20 +6,20 @@
  * @copyright SPDX-FileCopyrightText: 2025 Dharun A P
  */
 
-#include <cassert>
-#include <iostream>
-#include <array>
-#include <cstdint>
-#include <vector>
 #include <algorithm>
+#include <array>
+#include <cassert>
+#include <cstdint>
+#include <iostream>
+#include <vector>
 
 // Mock Qt types for testing
 class MockQLowEnergyService {
-public:
+  public:
     std::vector<uint8_t> last_written_data;
     bool write_called = false;
     bool valid = true;
-    
+
     void writeCharacteristic(void* /*ch*/, const std::vector<uint8_t>& data, int /*mode*/) {
         write_called = true;
         last_written_data = data;
@@ -27,7 +27,7 @@ public:
 };
 
 class MockQLowEnergyCharacteristic {
-public:
+  public:
     bool valid = true;
     bool isValid() const { return valid; }
 };
@@ -52,90 +52,96 @@ auto make_report_writer_test(MockQLowEnergyService* service, MockQLowEnergyChara
 
 void test_valid_service_and_characteristic() {
     std::cout << "Testing report writer with valid service and characteristic... ";
-    
+
     MockQLowEnergyService service;
     MockQLowEnergyCharacteristic ch;
-    
+
     auto writer = make_report_writer_test(&service, ch);
-    
-    std::array<uint8_t, 8> test_report = {0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00}; // Ctrl+A
+
+    std::array<uint8_t, 8> test_report = {0x01, 0x00, 0x04, 0x00,
+                                          0x00, 0x00, 0x00, 0x00};  // Ctrl+A
     writer(test_report);
-    
+
     assert(service.write_called);
     assert(service.last_written_data.size() == 8);
-    assert(std::equal(service.last_written_data.begin(), service.last_written_data.end(), test_report.begin()));
-    
+    assert(std::equal(service.last_written_data.begin(), service.last_written_data.end(),
+                      test_report.begin()));
+
     std::cout << "PASSED" << std::endl;
 }
 
 void test_null_service() {
     std::cout << "Testing report writer with null service... ";
-    
+
     MockQLowEnergyCharacteristic ch;
-    
+
     auto writer = make_report_writer_test(nullptr, ch);
-    
+
     std::array<uint8_t, 8> test_report = {0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00};
-    
+
     // Should not crash when service is null
     writer(test_report);
-    
+
     std::cout << "PASSED" << std::endl;
 }
 
 void test_invalid_characteristic() {
     std::cout << "Testing report writer with invalid characteristic... ";
-    
+
     MockQLowEnergyService service;
     MockQLowEnergyCharacteristic ch;
     ch.valid = false;
-    
+
     auto writer = make_report_writer_test(&service, ch);
-    
+
     std::array<uint8_t, 8> test_report = {0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00};
     writer(test_report);
-    
+
     // Should not call write when characteristic is invalid
     assert(service.write_called == false);
-    
+
     std::cout << "PASSED" << std::endl;
 }
 
 void test_different_reports() {
     std::cout << "Testing report writer with different HID reports... ";
-    
+
     MockQLowEnergyService service;
     MockQLowEnergyCharacteristic ch;
-    
+
     auto writer = make_report_writer_test(&service, ch);
-    
+
     // Test empty report
     std::array<uint8_t, 8> empty_report = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     writer(empty_report);
     assert(service.write_called);
     assert(service.last_written_data.size() == 8);
-    assert(std::equal(service.last_written_data.begin(), service.last_written_data.end(), empty_report.begin()));
-    
+    assert(std::equal(service.last_written_data.begin(), service.last_written_data.end(),
+                      empty_report.begin()));
+
     // Reset for next test
     service.write_called = false;
     service.last_written_data.clear();
-    
+
     // Test modifier-only report (Shift)
     std::array<uint8_t, 8> shift_report = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     writer(shift_report);
     assert(service.write_called);
-    assert(std::equal(service.last_written_data.begin(), service.last_written_data.end(), shift_report.begin()));
-    
+    assert(std::equal(service.last_written_data.begin(), service.last_written_data.end(),
+                      shift_report.begin()));
+
     // Reset for next test
     service.write_called = false;
     service.last_written_data.clear();
-    
+
     // Test multiple keys report
-    std::array<uint8_t, 8> multi_report = {0x00, 0x00, 0x04, 0x05, 0x06, 0x00, 0x00, 0x00}; // A, B, C
+    std::array<uint8_t, 8> multi_report = {0x00, 0x00, 0x04, 0x05,
+                                           0x06, 0x00, 0x00, 0x00};  // A, B, C
     writer(multi_report);
     assert(service.write_called);
-    assert(std::equal(service.last_written_data.begin(), service.last_written_data.end(), multi_report.begin()));
-    
+    assert(std::equal(service.last_written_data.begin(), service.last_written_data.end(),
+                      multi_report.begin()));
+
     std::cout << "PASSED" << std::endl;
 }
 

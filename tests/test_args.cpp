@@ -135,12 +135,12 @@ void test_disable_auto_connect_option() {
 
     assert(opts.has_value());
     assert(opts->disable_auto_connect == true);
-    
+
     // Test default value
     auto [argc2, argv2] = make_argv({"ninja_util"});
     args::ArgumentParser parser2(argc2, argv2);
     auto opts2 = parser2.parse();
-    
+
     assert(opts2.has_value());
     assert(opts2->disable_auto_connect == false);
 

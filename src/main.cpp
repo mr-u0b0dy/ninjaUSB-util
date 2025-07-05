@@ -100,7 +100,7 @@ void signal_handler(int signum) {
         // Ignore Ctrl+C to prevent accidental program termination during key capture
         return;
     }
-    
+
     LOG_INFO("Caught signal " + std::to_string(signum) + ", exiting...");
     g_running = false;
 }
@@ -148,18 +148,18 @@ auto make_report_writer(QLowEnergyService* service, QLowEnergyCharacteristic ch)
 
 /**
  * @brief Hotkey combination detector for program exit
- * 
+ *
  * Detects the Alt+Ctrl+H key combination to provide a safe way to exit
  * the program while capturing keystrokes. This replaces Ctrl+C functionality
  * which is disabled to prevent accidental program termination.
  */
 class ExitHotkeyDetector {
-private:
+  private:
     bool ctrl_pressed_ = false;
     bool alt_pressed_ = false;
     bool h_pressed_ = false;
-    
-public:
+
+  public:
     /**
      * @brief Process a key event and check for exit hotkey combination
      * @param linux_code Linux input event code
@@ -169,21 +169,25 @@ public:
     bool process_key_event(int linux_code, int value) {
         bool is_press = (value == 1);
         bool is_release = (value == 0);
-        
+
         // Track modifier key states
         switch (linux_code) {
             case KEY_LEFTCTRL:
             case KEY_RIGHTCTRL:
-                if (is_press) ctrl_pressed_ = true;
-                else if (is_release) ctrl_pressed_ = false;
+                if (is_press)
+                    ctrl_pressed_ = true;
+                else if (is_release)
+                    ctrl_pressed_ = false;
                 break;
-                
+
             case KEY_LEFTALT:
             case KEY_RIGHTALT:
-                if (is_press) alt_pressed_ = true;
-                else if (is_release) alt_pressed_ = false;
+                if (is_press)
+                    alt_pressed_ = true;
+                else if (is_release)
+                    alt_pressed_ = false;
                 break;
-                
+
             case KEY_H:
                 if (is_press) {
                     h_pressed_ = true;
@@ -197,17 +201,17 @@ public:
                 }
                 break;
         }
-        
+
         return false;
     }
-    
+
     /**
      * @brief Get current state description for debugging
      * @return String describing current modifier states
      */
     std::string get_state_description() const {
-        return "Ctrl: " + std::string(ctrl_pressed_ ? "ON" : "OFF") + 
-               ", Alt: " + std::string(alt_pressed_ ? "ON" : "OFF") + 
+        return "Ctrl: " + std::string(ctrl_pressed_ ? "ON" : "OFF") +
+               ", Alt: " + std::string(alt_pressed_ ? "ON" : "OFF") +
                ", H: " + std::string(h_pressed_ ? "ON" : "OFF");
     }
 };
@@ -395,7 +399,8 @@ int main(int argc, char* argv[]) {
                         break;
                     }
                 }
-                LOG_INFO("Auto-connecting to NinjaUSB device: " + ninjaDevices[0].name().toStdString());
+                LOG_INFO("Auto-connecting to NinjaUSB device: " +
+                         ninjaDevices[0].name().toStdString());
                 if (g_options.verbose) {
                     LOG_DEBUG("Auto-connect enabled and exactly one NinjaUSB device found");
                 }
@@ -407,8 +412,8 @@ int main(int argc, char* argv[]) {
                     QString deviceName = device.name();
                     if (deviceName.contains("ninja", Qt::CaseInsensitive) ||
                         deviceName.contains("NinjaUSB", Qt::CaseInsensitive)) {
-                        LOG_INFO("  " + std::to_string(i) + ": " + device.name().toStdString() + 
-                                " [" + device.address().toString().toStdString() + "]");
+                        LOG_INFO("  " + std::to_string(i) + ": " + device.name().toStdString() +
+                                 " [" + device.address().toString().toStdString() + "]");
                     }
                 }
                 LOG_INFO("Choose device number: ");
@@ -425,11 +430,11 @@ int main(int argc, char* argv[]) {
                 } else if (ninjaDevices.empty()) {
                     LOG_INFO("No NinjaUSB devices found. Available devices:");
                 }
-                
+
                 for (int i = 0; i < foundDevices.size(); ++i) {
                     const auto& device = foundDevices[i];
-                    LOG_INFO("  " + std::to_string(i) + ": " + device.name().toStdString() + 
-                            " [" + device.address().toString().toStdString() + "]");
+                    LOG_INFO("  " + std::to_string(i) + ": " + device.name().toStdString() + " [" +
+                             device.address().toString().toStdString() + "]");
                 }
                 LOG_INFO("Choose device number: ");
                 std::cin >> index;
@@ -457,44 +462,46 @@ int main(int argc, char* argv[]) {
         });
 
         // Handle connection errors
-        QObject::connect(controller, QOverload<QLowEnergyController::Error>::of(&QLowEnergyController::errorOccurred),
-                         [&](QLowEnergyController::Error error) {
-                             QString errorString;
-                             switch (error) {
-                                 case QLowEnergyController::NoError:
-                                     return; // No error, continue
-                                 case QLowEnergyController::UnknownError:
-                                     errorString = "Unknown error";
-                                     break;
-                                 case QLowEnergyController::UnknownRemoteDeviceError:
-                                     errorString = "Unknown remote device error";
-                                     break;
-                                 case QLowEnergyController::NetworkError:
-                                     errorString = "Network error";
-                                     break;
-                                 case QLowEnergyController::InvalidBluetoothAdapterError:
-                                     errorString = "Invalid Bluetooth adapter";
-                                     break;
-                                 case QLowEnergyController::ConnectionError:
-                                     errorString = "Connection error";
-                                     break;
-                                 case QLowEnergyController::AdvertisingError:
-                                     errorString = "Advertising error";
-                                     break;
-                                 case QLowEnergyController::RemoteHostClosedError:
-                                     errorString = "Remote host closed connection";
-                                     break;
-                                 case QLowEnergyController::AuthorizationError:
-                                     errorString = "Authorization error";
-                                     break;
-                                 default:
-                                     errorString = "Error code: " + QString::number(static_cast<int>(error));
-                                     break;
-                             }
-                             LOG_ERROR("BLE connection failed: " + errorString.toStdString());
-                             g_running = false;
-                             app.quit();
-                         });
+        QObject::connect(
+            controller,
+            QOverload<QLowEnergyController::Error>::of(&QLowEnergyController::errorOccurred),
+            [&](QLowEnergyController::Error error) {
+                QString errorString;
+                switch (error) {
+                    case QLowEnergyController::NoError:
+                        return;  // No error, continue
+                    case QLowEnergyController::UnknownError:
+                        errorString = "Unknown error";
+                        break;
+                    case QLowEnergyController::UnknownRemoteDeviceError:
+                        errorString = "Unknown remote device error";
+                        break;
+                    case QLowEnergyController::NetworkError:
+                        errorString = "Network error";
+                        break;
+                    case QLowEnergyController::InvalidBluetoothAdapterError:
+                        errorString = "Invalid Bluetooth adapter";
+                        break;
+                    case QLowEnergyController::ConnectionError:
+                        errorString = "Connection error";
+                        break;
+                    case QLowEnergyController::AdvertisingError:
+                        errorString = "Advertising error";
+                        break;
+                    case QLowEnergyController::RemoteHostClosedError:
+                        errorString = "Remote host closed connection";
+                        break;
+                    case QLowEnergyController::AuthorizationError:
+                        errorString = "Authorization error";
+                        break;
+                    default:
+                        errorString = "Error code: " + QString::number(static_cast<int>(error));
+                        break;
+                }
+                LOG_ERROR("BLE connection failed: " + errorString.toStdString());
+                g_running = false;
+                app.quit();
+            });
 
         // Handle connection state changes
         QObject::connect(controller, &QLowEnergyController::stateChanged,
@@ -524,7 +531,8 @@ int main(int argc, char* argv[]) {
                                          stateString = "Advertising";
                                          break;
                                      default:
-                                         stateString = "Unknown state: " + QString::number(static_cast<int>(state));
+                                         stateString = "Unknown state: " +
+                                                       QString::number(static_cast<int>(state));
                                          break;
                                  }
                                  LOG_DEBUG("BLE Controller state: " + stateString.toStdString());
@@ -548,22 +556,23 @@ int main(int argc, char* argv[]) {
                 if (!service)
                     continue;
 
-                QObject::connect(service, &QLowEnergyService::stateChanged,
-                                 [&](QLowEnergyService::ServiceState s) {
-                                     if (s != QLowEnergyService::RemoteServiceDiscovered)
-                                         return;
-                                     for (const auto& c : service->characteristics()) {
-                                         if (c.properties() &
-                                             (QLowEnergyCharacteristic::Write |
-                                              QLowEnergyCharacteristic::WriteNoResponse)) {
-                                             targetChar = c;
-                                             sendReport = make_report_writer(service, targetChar);
-                                             LOG_INFO("✔ Found writable characteristic: " +
-                                                      c.uuid().toString().toStdString());
-                                             LOG_INFO("Ready! Start typing – Alt+Ctrl+H to quit (Ctrl+C disabled).");
-                                         }
-                                     }
-                                 });
+                QObject::connect(
+                    service, &QLowEnergyService::stateChanged,
+                    [&](QLowEnergyService::ServiceState s) {
+                        if (s != QLowEnergyService::RemoteServiceDiscovered)
+                            return;
+                        for (const auto& c : service->characteristics()) {
+                            if (c.properties() & (QLowEnergyCharacteristic::Write |
+                                                  QLowEnergyCharacteristic::WriteNoResponse)) {
+                                targetChar = c;
+                                sendReport = make_report_writer(service, targetChar);
+                                LOG_INFO("✔ Found writable characteristic: " +
+                                         c.uuid().toString().toStdString());
+                                LOG_INFO(
+                                    "Ready! Start typing – Alt+Ctrl+H to quit (Ctrl+C disabled).");
+                            }
+                        }
+                    });
                 service->discoverDetails();
                 if (targetChar.isValid())
                     break;
@@ -573,25 +582,25 @@ int main(int argc, char* argv[]) {
                 app.quit();
             }
         });
-        
+
         // Set up connection timeout (30 seconds)
         QTimer* connectionTimer = new QTimer();
         connectionTimer->setSingleShot(true);
-        connectionTimer->setInterval(30000); // 30 seconds
-        
+        connectionTimer->setInterval(30000);  // 30 seconds
+
         QObject::connect(connectionTimer, &QTimer::timeout, [&, connectionTimer]() {
             LOG_ERROR("BLE connection timeout - failed to connect within 30 seconds");
             connectionTimer->deleteLater();
             g_running = false;
             app.quit();
         });
-        
+
         // Stop timer when connected successfully
         QObject::connect(controller, &QLowEnergyController::connected, [connectionTimer]() {
             connectionTimer->stop();
             connectionTimer->deleteLater();
         });
-        
+
         // Start connection timeout timer before attempting connection
         connectionTimer->start();
         controller->connectToDevice();
@@ -657,7 +666,7 @@ int main(int argc, char* argv[]) {
                     app.quit();
                     return;
                 }
-                
+
                 if (g_options.verbose) {
                     LOG_DEBUG("Hotkey state: " + hotkey_detector.get_state_description());
                 }
@@ -669,15 +678,13 @@ int main(int argc, char* argv[]) {
                             auto report = kb_state.get_report();
                             sendReport(report);
                             if (g_options.verbose) {
-                                LOG_DEBUG("Sent HID report: [" + 
-                                         std::to_string(report[0]) + ", " + 
-                                         std::to_string(report[1]) + ", " + 
-                                         std::to_string(report[2]) + ", " + 
-                                         std::to_string(report[3]) + ", " + 
-                                         std::to_string(report[4]) + ", " + 
-                                         std::to_string(report[5]) + ", " + 
-                                         std::to_string(report[6]) + ", " + 
-                                         std::to_string(report[7]) + "]");
+                                LOG_DEBUG(
+                                    "Sent HID report: [" + std::to_string(report[0]) + ", " +
+                                    std::to_string(report[1]) + ", " + std::to_string(report[2]) +
+                                    ", " + std::to_string(report[3]) + ", " +
+                                    std::to_string(report[4]) + ", " + std::to_string(report[5]) +
+                                    ", " + std::to_string(report[6]) + ", " +
+                                    std::to_string(report[7]) + "]");
                             }
                         }
                         break;
