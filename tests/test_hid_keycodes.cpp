@@ -9,7 +9,6 @@
 #include <array>
 #include <cassert>
 #include <iostream>
-#include <string>
 
 #include "hid_keycodes.hpp"
 

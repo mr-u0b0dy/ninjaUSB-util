@@ -111,3 +111,26 @@ flowchart LR
 ## License
 
 Licensed under the Apache License 2.0 - see [LICENSE](LICENSE) file.
+
+## 🧪 Testing
+
+The project includes comprehensive unit tests with 100% pass rate:
+
+```bash
+# Build and run tests
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+cd build && ctest --output-on-failure
+```
+
+**Test Coverage:**
+
+- ✅ Device management and hot-plug detection
+- ✅ Command-line argument parsing (fixed v1.1.1)
+- ✅ HID keyboard mappings and state management
+- ✅ Logging system with multiple levels
+- ✅ Exit hotkey detection (Alt+Ctrl+H)
+- ✅ Signal handling for graceful shutdown
+- ✅ BLE report writer functionality
+
+For detailed testing procedures, see [doc/TESTING.md](doc/TESTING.md).

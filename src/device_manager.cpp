@@ -9,13 +9,14 @@
 #include "device_manager.hpp"
 
 #include <algorithm>
-#include <cerrno>  // Add for errno support
+#include <cerrno>
 #include <cstring>
 #include <fcntl.h>
-#include <functional>  // Add missing functional header
+#include <functional>
 #include <libudev.h>
+#include <string>
 #include <unistd.h>
-#include <vector>  // Add missing vector header
+#include <vector>
 
 #include <libevdev/libevdev.h>
 
