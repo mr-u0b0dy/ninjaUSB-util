@@ -456,6 +456,81 @@ int main(int argc, char* argv[]) {
             app.quit();
         });
 
+        // Handle connection errors
+        QObject::connect(controller, QOverload<QLowEnergyController::Error>::of(&QLowEnergyController::errorOccurred),
+                         [&](QLowEnergyController::Error error) {
+                             QString errorString;
+                             switch (error) {
+                                 case QLowEnergyController::NoError:
+                                     return; // No error, continue
+                                 case QLowEnergyController::UnknownError:
+                                     errorString = "Unknown error";
+                                     break;
+                                 case QLowEnergyController::UnknownRemoteDeviceError:
+                                     errorString = "Unknown remote device error";
+                                     break;
+                                 case QLowEnergyController::NetworkError:
+                                     errorString = "Network error";
+                                     break;
+                                 case QLowEnergyController::InvalidBluetoothAdapterError:
+                                     errorString = "Invalid Bluetooth adapter";
+                                     break;
+                                 case QLowEnergyController::ConnectionError:
+                                     errorString = "Connection error";
+                                     break;
+                                 case QLowEnergyController::AdvertisingError:
+                                     errorString = "Advertising error";
+                                     break;
+                                 case QLowEnergyController::RemoteHostClosedError:
+                                     errorString = "Remote host closed connection";
+                                     break;
+                                 case QLowEnergyController::AuthorizationError:
+                                     errorString = "Authorization error";
+                                     break;
+                                 default:
+                                     errorString = "Error code: " + QString::number(static_cast<int>(error));
+                                     break;
+                             }
+                             LOG_ERROR("BLE connection failed: " + errorString.toStdString());
+                             g_running = false;
+                             app.quit();
+                         });
+
+        // Handle connection state changes
+        QObject::connect(controller, &QLowEnergyController::stateChanged,
+                         [&](QLowEnergyController::ControllerState state) {
+                             if (g_options.verbose) {
+                                 QString stateString;
+                                 switch (state) {
+                                     case QLowEnergyController::UnconnectedState:
+                                         stateString = "Unconnected";
+                                         break;
+                                     case QLowEnergyController::ConnectingState:
+                                         stateString = "Connecting";
+                                         break;
+                                     case QLowEnergyController::ConnectedState:
+                                         stateString = "Connected";
+                                         break;
+                                     case QLowEnergyController::DiscoveringState:
+                                         stateString = "Discovering";
+                                         break;
+                                     case QLowEnergyController::DiscoveredState:
+                                         stateString = "Discovered";
+                                         break;
+                                     case QLowEnergyController::ClosingState:
+                                         stateString = "Closing";
+                                         break;
+                                     case QLowEnergyController::AdvertisingState:
+                                         stateString = "Advertising";
+                                         break;
+                                     default:
+                                         stateString = "Unknown state: " + QString::number(static_cast<int>(state));
+                                         break;
+                                 }
+                                 LOG_DEBUG("BLE Controller state: " + stateString.toStdString());
+                             }
+                         });
+
         QObject::connect(controller, &QLowEnergyController::serviceDiscovered,
                          [&](const QBluetoothUuid& uuid) {
                              if (g_options.verbose) {
@@ -498,6 +573,27 @@ int main(int argc, char* argv[]) {
                 app.quit();
             }
         });
+        
+        // Set up connection timeout (30 seconds)
+        QTimer* connectionTimer = new QTimer();
+        connectionTimer->setSingleShot(true);
+        connectionTimer->setInterval(30000); // 30 seconds
+        
+        QObject::connect(connectionTimer, &QTimer::timeout, [&, connectionTimer]() {
+            LOG_ERROR("BLE connection timeout - failed to connect within 30 seconds");
+            connectionTimer->deleteLater();
+            g_running = false;
+            app.quit();
+        });
+        
+        // Stop timer when connected successfully
+        QObject::connect(controller, &QLowEnergyController::connected, [connectionTimer]() {
+            connectionTimer->stop();
+            connectionTimer->deleteLater();
+        });
+        
+        // Start connection timeout timer before attempting connection
+        connectionTimer->start();
         controller->connectToDevice();
     });
 

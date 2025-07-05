@@ -54,6 +54,12 @@ sudo ./ninja_util
 
 By default, if exactly one NinjaUSB device is found during scanning, the utility will automatically connect to it. This can be disabled with the `--disable-auto-connect` option if you prefer to manually select devices.
 
+### Connection Handling
+
+- **Connection Timeout**: Automatically exits if BLE connection fails within 30 seconds
+- **Error Recovery**: Provides detailed error messages for different connection failure types
+- **Graceful Exit**: Safely terminates the program if unable to establish BLE connection
+
 ## Documentation
 
 - **[User Guide](doc/USER_GUIDE.md)** - Installation, usage, and troubleshooting

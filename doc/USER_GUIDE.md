@@ -198,6 +198,40 @@ ninjaUSB-util implements exclusive device access to prevent captured keystrokes 
 
 - If exclusive access fails, the program continues to work but logs a warning
 - Keystrokes may "leak" to the host system if grabbing fails
+
+## BLE Connection Management
+
+### Connection Process
+
+1. **Device Discovery**: Scans for BLE devices using the configured timeout
+2. **Device Selection**: Automatic selection for single NinjaUSB devices or manual selection
+3. **Connection Attempt**: Establishes BLE connection with 30-second timeout
+4. **Service Discovery**: Discovers GATT services and characteristics
+5. **Ready State**: Begins forwarding keyboard input as HID reports
+
+### Connection Error Handling
+
+The utility provides robust error handling for BLE connection issues:
+
+#### Connection Timeout
+
+- **Duration**: 30 seconds maximum connection time
+- **Behavior**: Program exits with clear error message if connection fails
+- **Verbose Mode**: Shows detailed connection state changes
+
+#### Error Types
+
+- **Network Error**: Bluetooth adapter or network connectivity issues
+- **Connection Error**: Device unavailable or connection refused
+- **Authorization Error**: Bluetooth pairing or permission issues
+- **Remote Host Closed**: Target device disconnected during connection
+- **Invalid Adapter**: Bluetooth adapter not available or disabled
+
+#### Recovery Actions
+
+- **Automatic Exit**: Program terminates gracefully on connection failure
+- **Clear Messaging**: Detailed error descriptions for troubleshooting
+- **Resource Cleanup**: Proper cleanup of allocated resources before exit
 - This typically happens due to insufficient permissions or device conflicts
 
 > **Note**: Exclusive access requires the program to run with appropriate permissions (typically root) to access input devices.
