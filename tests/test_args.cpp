@@ -125,6 +125,66 @@ void test_combined_options() {
 
     std::cout << "PASSED\n";
 }
+
+void test_disable_auto_connect_option() {
+    std::cout << "Testing disable auto-connect option... ";
+
+    auto [argc, argv] = make_argv({"ninja_util", "--disable-auto-connect"});
+    args::ArgumentParser parser(argc, argv);
+    auto opts = parser.parse();
+
+    assert(opts.has_value());
+    assert(opts->disable_auto_connect == true);
+    
+    // Test default value
+    auto [argc2, argv2] = make_argv({"ninja_util"});
+    args::ArgumentParser parser2(argc2, argv2);
+    auto opts2 = parser2.parse();
+    
+    assert(opts2.has_value());
+    assert(opts2->disable_auto_connect == false);
+
+    std::cout << "PASSED\n";
+}
+
+void test_list_devices_option() {
+    std::cout << "Testing list devices option... ";
+
+    auto [argc, argv] = make_argv({"ninja_util", "--list-devices"});
+    args::ArgumentParser parser(argc, argv);
+    auto opts = parser.parse();
+
+    assert(opts.has_value());
+    assert(opts->list_devices == true);
+
+    std::cout << "PASSED\n";
+}
+
+void test_target_device_option() {
+    std::cout << "Testing target device option... ";
+
+    auto [argc, argv] = make_argv({"ninja_util", "--target", "AA:BB:CC:DD:EE:FF"});
+    args::ArgumentParser parser(argc, argv);
+    auto opts = parser.parse();
+
+    assert(opts.has_value());
+    assert(opts->target_device == "AA:BB:CC:DD:EE:FF");
+
+    std::cout << "PASSED\n";
+}
+
+void test_poll_interval_option() {
+    std::cout << "Testing poll interval option... ";
+
+    auto [argc, argv] = make_argv({"ninja_util", "--poll-interval", "5"});
+    args::ArgumentParser parser(argc, argv);
+    auto opts = parser.parse();
+
+    assert(opts.has_value());
+    assert(opts->poll_interval == 5);
+
+    std::cout << "PASSED\n";
+}
 }  // namespace
 
 int main() {
@@ -138,6 +198,10 @@ int main() {
         test_invalid_option();
         test_log_level_option();
         test_combined_options();
+        test_disable_auto_connect_option();
+        test_list_devices_option();
+        test_target_device_option();
+        test_poll_interval_option();
 
         std::cout << "\n=== All argument tests completed ===\n";
         return 0;
