@@ -88,13 +88,19 @@ std::atomic<bool> g_running{true};
  * @brief Signal handler for graceful shutdown
  * @param signum Signal number (SIGINT, SIGTERM, etc.)
  *
- * Sets the global running flag to false, causing the main event loop
- * to exit cleanly. This allows proper cleanup of resources and connections.
+ * Handles signals differently:
+ * - SIGINT (Ctrl+C): Ignored to prevent accidental exit during key capture
+ * - SIGTERM: Still triggers graceful shutdown
  *
  * @note This function is called from signal context and must be signal-safe.
  *       Only async-signal-safe functions should be used here.
  */
 void signal_handler(int signum) {
+    if (signum == SIGINT) {
+        // Ignore Ctrl+C to prevent accidental program termination during key capture
+        return;
+    }
+    
     LOG_INFO("Caught signal " + std::to_string(signum) + ", exiting...");
     g_running = false;
 }
@@ -142,6 +148,76 @@ auto make_report_writer(QLowEnergyService* service, QLowEnergyCharacteristic ch)
         }
     };
 }
+
+// ---------------------------------------------------------------------------
+//  Hotkey Detection for Program Exit
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Hotkey combination detector for program exit
+ * 
+ * Detects the Alt+Ctrl+H key combination to provide a safe way to exit
+ * the program while capturing keystrokes. This replaces Ctrl+C functionality
+ * which is disabled to prevent accidental program termination.
+ */
+class ExitHotkeyDetector {
+private:
+    bool ctrl_pressed_ = false;
+    bool alt_pressed_ = false;
+    bool h_pressed_ = false;
+    
+public:
+    /**
+     * @brief Process a key event and check for exit hotkey combination
+     * @param linux_code Linux input event code
+     * @param value Event value (0=release, 1=press, 2=repeat)
+     * @return true if Alt+Ctrl+H combination is detected
+     */
+    bool process_key_event(int linux_code, int value) {
+        bool is_press = (value == 1);
+        bool is_release = (value == 0);
+        
+        // Track modifier key states
+        switch (linux_code) {
+            case KEY_LEFTCTRL:
+            case KEY_RIGHTCTRL:
+                if (is_press) ctrl_pressed_ = true;
+                else if (is_release) ctrl_pressed_ = false;
+                break;
+                
+            case KEY_LEFTALT:
+            case KEY_RIGHTALT:
+                if (is_press) alt_pressed_ = true;
+                else if (is_release) alt_pressed_ = false;
+                break;
+                
+            case KEY_H:
+                if (is_press) {
+                    h_pressed_ = true;
+                    // Check if all required keys are pressed
+                    if (ctrl_pressed_ && alt_pressed_ && h_pressed_) {
+                        LOG_INFO("Exit hotkey detected (Alt+Ctrl+H) - stopping program...");
+                        return true;
+                    }
+                } else if (is_release) {
+                    h_pressed_ = false;
+                }
+                break;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * @brief Get current state description for debugging
+     * @return String describing current modifier states
+     */
+    std::string get_state_description() const {
+        return "Ctrl: " + std::string(ctrl_pressed_ ? "ON" : "OFF") + 
+               ", Alt: " + std::string(alt_pressed_ ? "ON" : "OFF") + 
+               ", H: " + std::string(h_pressed_ ? "ON" : "OFF");
+    }
+};
 
 // ---------------------------------------------------------------------------
 //  Main Application Entry Point
@@ -349,7 +425,7 @@ int main(int argc, char* argv[]) {
                                              sendReport = make_report_writer(service, targetChar);
                                              LOG_INFO("✔ Found writable characteristic: " +
                                                       c.uuid().toString().toStdString());
-                                             LOG_INFO("Ready! Start typing – Ctrl+C to quit.");
+                                             LOG_INFO("Ready! Start typing – Alt+Ctrl+H to quit (Ctrl+C disabled).");
                                          }
                                      }
                                  });
@@ -408,6 +484,23 @@ int main(int argc, char* argv[]) {
                 if (g_options.verbose) {
                     LOG_DEBUG("Key event: code=" + std::to_string(ev.code) + " value=" +
                               std::to_string(ev.value) + " from " + keyboards[i].name());
+                }
+
+                // Check for exit hotkey (Alt+Ctrl+H)
+                static ExitHotkeyDetector hotkey_detector;
+                if (hotkey_detector.process_key_event(ev.code, ev.value)) {
+                    // Send empty report to release all keys before exit
+                    if (sendReport) {
+                        sendReport({0, 0, 0, 0, 0, 0, 0, 0});
+                    }
+                    LOG_INFO("Stopping HID reports and exiting...");
+                    g_running = false;
+                    app.quit();
+                    return;
+                }
+                
+                if (g_options.verbose) {
+                    LOG_DEBUG("Hotkey state: " + hotkey_detector.get_state_description());
                 }
 
                 switch (ev.value) {

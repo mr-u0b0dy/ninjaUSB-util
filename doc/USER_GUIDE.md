@@ -148,7 +148,19 @@ ninja
 4. **Start Typing**: Once connected, keyboard input will be forwarded to the
    selected BLE device
 
-5. **Exit**: Press Ctrl+C to quit the application gracefully
+5. **Exit**: Use **Alt+Ctrl+H** to safely exit the application. Ctrl+C is disabled
+   to prevent accidental termination while capturing keystrokes.
+
+## Keyboard Controls
+
+While the program is running and capturing keystrokes:
+
+- **Alt+Ctrl+H**: Safe exit hotkey - stops HID reports and exits the program
+- **Ctrl+C**: Disabled to prevent accidental program termination
+- **SIGTERM**: Can still be used to terminate the program externally
+
+> **Important**: Use Alt+Ctrl+H to exit safely. This ensures all keys are properly
+> released before the program terminates, preventing stuck keys on the target device.
 
 ## Supported Keys
 

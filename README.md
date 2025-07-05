@@ -15,6 +15,8 @@ A Linux utility that bridges USB keyboard input to Bluetooth Low Energy (BLE) de
 - **BLE Device Discovery**: Scans for and connects to BLE devices
 - **HID Compliance**: Sends standard 8-byte HID keyboard reports compatible with
   most BLE devices
+- **Safe Exit Hotkey**: Use Alt+Ctrl+H to safely exit the program while capturing
+  keystrokes (Ctrl+C is disabled to prevent accidental termination)
 - **Modern Command-Line Interface**: Comprehensive argument parsing with help,
   version, and configuration options
 - **Verbose Logging**: Detailed logging with configurable levels for debugging and
