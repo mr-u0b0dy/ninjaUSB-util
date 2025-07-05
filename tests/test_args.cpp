@@ -8,11 +8,10 @@
 
 #include <cassert>
 #include <ios>
-#include <iostream>
-#include <string>
 #include <vector>
 
 #include "args.hpp"
+#include "test_framework.hpp"
 
 namespace {
 // Helper to create argc/argv from vector of strings
@@ -32,8 +31,6 @@ std::pair<int, char**> make_argv(const std::vector<std::string>& args) {
 }
 
 void test_help_option() {
-    std::cout << "Testing help option... ";
-
     auto [argc, argv] = make_argv({"ninja_util", "--help"});
     args::ArgumentParser parser(argc, argv);
     auto opts = parser.parse();
@@ -46,8 +43,6 @@ void test_help_option() {
 }
 
 void test_version_option() {
-    std::cout << "Testing version option... ";
-
     auto [argc, argv] = make_argv({"ninja_util", "-v"});
     args::ArgumentParser parser(argc, argv);
     auto opts = parser.parse();
@@ -60,8 +55,6 @@ void test_version_option() {
 }
 
 void test_verbose_option() {
-    std::cout << "Testing verbose option... ";
-
     // Test --verbose
     auto [argc1, argv1] = make_argv({"ninja_util", "--verbose"});
     args::ArgumentParser parser1(argc1, argv1);
@@ -82,8 +75,6 @@ void test_verbose_option() {
 }
 
 void test_scan_timeout_option() {
-    std::cout << "Testing scan timeout option... ";
-
     auto [argc, argv] = make_argv({"ninja_util", "--scan-timeout", "5000"});
     args::ArgumentParser parser(argc, argv);
     auto opts = parser.parse();
@@ -95,8 +86,6 @@ void test_scan_timeout_option() {
 }
 
 void test_invalid_option() {
-    std::cout << "Testing invalid option handling... ";
-
     // Test unknown flag
     auto [argc1, argv1] = make_argv({"ninja_util", "--unknown-flag"});
     args::ArgumentParser parser1(argc1, argv1);
@@ -135,8 +124,6 @@ void test_invalid_option() {
 }
 
 void test_log_level_option() {
-    std::cout << "Testing log level option... ";
-
     auto [argc, argv] = make_argv({"ninja_util", "--log-level", "debug"});
     args::ArgumentParser parser(argc, argv);
     auto opts = parser.parse();
@@ -148,8 +135,6 @@ void test_log_level_option() {
 }
 
 void test_combined_options() {
-    std::cout << "Testing combined options... ";
-
     auto [argc, argv] =
         make_argv({"ninja_util", "-V", "--scan-timeout", "3000", "--log-level", "warn"});
     args::ArgumentParser parser(argc, argv);
@@ -164,8 +149,6 @@ void test_combined_options() {
 }
 
 void test_disable_auto_connect_option() {
-    std::cout << "Testing disable auto-connect option... ";
-
     auto [argc, argv] = make_argv({"ninja_util", "--disable-auto-connect"});
     args::ArgumentParser parser(argc, argv);
     auto opts = parser.parse();
@@ -185,8 +168,6 @@ void test_disable_auto_connect_option() {
 }
 
 void test_list_devices_option() {
-    std::cout << "Testing list devices option... ";
-
     auto [argc, argv] = make_argv({"ninja_util", "--list-devices"});
     args::ArgumentParser parser(argc, argv);
     auto opts = parser.parse();
@@ -198,8 +179,6 @@ void test_list_devices_option() {
 }
 
 void test_target_device_option() {
-    std::cout << "Testing target device option... ";
-
     auto [argc, argv] = make_argv({"ninja_util", "--target", "AA:BB:CC:DD:EE:FF"});
     args::ArgumentParser parser(argc, argv);
     auto opts = parser.parse();
@@ -211,8 +190,6 @@ void test_target_device_option() {
 }
 
 void test_poll_interval_option() {
-    std::cout << "Testing poll interval option... ";
-
     auto [argc, argv] = make_argv({"ninja_util", "--poll-interval", "5"});
     args::ArgumentParser parser(argc, argv);
     auto opts = parser.parse();
@@ -225,25 +202,17 @@ void test_poll_interval_option() {
 }  // namespace
 
 int main() {
-    std::cout << "=== Argument Parser Unit Tests ===\n";
-
-    try {
-        test_help_option();
-        test_version_option();
-        test_verbose_option();
-        test_scan_timeout_option();
-        test_invalid_option();
-        test_log_level_option();
-        test_combined_options();
-        test_disable_auto_connect_option();
-        test_list_devices_option();
-        test_target_device_option();
-        test_poll_interval_option();
-
-        std::cout << "\n=== All argument tests completed ===\n";
-        return 0;
-    } catch (const std::exception& e) {
-        std::cerr << "Test failed with exception: " << e.what() << "\n";
-        return 1;
-    }
+    return test_framework::run_test_suite(
+        "Argument Parser Unit Tests",
+        {{"help option", test_help_option},
+         {"version option", test_version_option},
+         {"verbose option", test_verbose_option},
+         {"scan timeout option", test_scan_timeout_option},
+         {"invalid option handling", test_invalid_option},
+         {"log level option", test_log_level_option},
+         {"combined options", test_combined_options},
+         {"disable auto connect option", test_disable_auto_connect_option},
+         {"list devices option", test_list_devices_option},
+         {"target device option", test_target_device_option},
+         {"poll interval option", test_poll_interval_option}});
 }

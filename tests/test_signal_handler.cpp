@@ -28,8 +28,6 @@ void test_signal_handler(int signum) {
 namespace {
 
 void test_sigint_ignored() {
-    std::cout << "Testing SIGINT is ignored... ";
-
     g_running_test = true;
     test_signal_handler(SIGINT);
 
@@ -40,8 +38,6 @@ void test_sigint_ignored() {
 }
 
 void test_sigterm_handled() {
-    std::cout << "Testing SIGTERM stops execution... ";
-
     g_running_test = true;
     test_signal_handler(SIGTERM);
 
@@ -52,8 +48,6 @@ void test_sigterm_handled() {
 }
 
 void test_other_signals_handled() {
-    std::cout << "Testing other signals stop execution... ";
-
     g_running_test = true;
     test_signal_handler(SIGUSR1);
 

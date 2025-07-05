@@ -14,8 +14,6 @@
 
 namespace {
 void test_keyboard_device_invalid_path() {
-    std::cout << "Testing KeyboardDevice with invalid path... ";
-
     // Test with empty path
     device::KeyboardDevice kbd("");
     assert(!kbd.is_valid());
@@ -28,8 +26,6 @@ void test_keyboard_device_invalid_path() {
 }
 
 void test_device_monitor_creation() {
-    std::cout << "Testing DeviceMonitor creation... ";
-
     device::DeviceMonitor monitor;
     // Note: This might fail in containers or restricted environments
     // but should work on a normal Linux system
@@ -37,8 +33,6 @@ void test_device_monitor_creation() {
 }
 
 void test_keyboard_manager_basic() {
-    std::cout << "Testing KeyboardManager basic functionality... ";
-
     device::KeyboardManager manager;
     // Should not crash during construction
     std::cout << "Found " << manager.device_count() << " keyboards... ";

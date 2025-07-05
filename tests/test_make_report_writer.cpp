@@ -51,8 +51,6 @@ auto make_report_writer_test(MockQLowEnergyService* service, MockQLowEnergyChara
 }
 
 void test_valid_service_and_characteristic() {
-    std::cout << "Testing report writer with valid service and characteristic... ";
-
     MockQLowEnergyService service;
     MockQLowEnergyCharacteristic ch;
 
@@ -71,8 +69,6 @@ void test_valid_service_and_characteristic() {
 }
 
 void test_null_service() {
-    std::cout << "Testing report writer with null service... ";
-
     MockQLowEnergyCharacteristic ch;
 
     auto writer = make_report_writer_test(nullptr, ch);
@@ -86,8 +82,6 @@ void test_null_service() {
 }
 
 void test_invalid_characteristic() {
-    std::cout << "Testing report writer with invalid characteristic... ";
-
     MockQLowEnergyService service;
     MockQLowEnergyCharacteristic ch;
     ch.valid = false;
@@ -104,8 +98,6 @@ void test_invalid_characteristic() {
 }
 
 void test_different_reports() {
-    std::cout << "Testing report writer with different HID reports... ";
-
     MockQLowEnergyService service;
     MockQLowEnergyCharacteristic ch;
 

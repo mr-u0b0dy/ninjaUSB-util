@@ -15,8 +15,6 @@
 namespace {
 
 void test_log_level_filtering() {
-    std::cout << "Testing log level filtering... ";
-
     // Set to INFO level
     logging::Logger::set_level("info");
 
@@ -34,8 +32,6 @@ void test_log_level_filtering() {
 }
 
 void test_log_level_changes() {
-    std::cout << "Testing log level changes... ";
-
     // Test various valid log levels
     logging::Logger::set_level("debug");
     logging::Logger::set_level("info");
@@ -49,8 +45,6 @@ void test_log_level_changes() {
 }
 
 void test_timestamp_functionality() {
-    std::cout << "Testing timestamp functionality... ";
-
     // Test enabling/disabling timestamps
     logging::Logger::enable_timestamps(true);
     LOG_INFO("Message with timestamp");
@@ -65,8 +59,6 @@ void test_timestamp_functionality() {
 }
 
 void test_all_log_levels() {
-    std::cout << "Testing all log levels... ";
-
     // Set to debug to see all messages
     logging::Logger::set_level("debug");
 
@@ -80,8 +72,6 @@ void test_all_log_levels() {
 }
 
 void test_message_formatting() {
-    std::cout << "Testing message formatting... ";
-
     logging::Logger::set_level("debug");
 
     // Test various message types
@@ -98,8 +88,6 @@ void test_message_formatting() {
 }
 
 void test_concurrent_logging() {
-    std::cout << "Testing concurrent logging safety... ";
-
     // Basic test - in a real scenario we'd use threads
     // For now, just ensure rapid consecutive calls don't crash
     logging::Logger::set_level("debug");
@@ -112,8 +100,6 @@ void test_concurrent_logging() {
 }
 
 void test_level_case_insensitivity() {
-    std::cout << "Testing log level case handling... ";
-
     // Test different cases (behavior depends on implementation)
     logging::Logger::set_level("DEBUG");
     logging::Logger::set_level("Info");

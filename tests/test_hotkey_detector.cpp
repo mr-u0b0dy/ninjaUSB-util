@@ -7,75 +7,13 @@
  */
 
 #include <cassert>
-#include <iostream>
-#include <string>
 
-// Since ExitHotkeyDetector is defined in main.cpp, we need to extract it
-// For testing purposes, let's create a standalone version
-#include <linux/input-event-codes.h>
-
-class ExitHotkeyDetector {
-  private:
-    bool ctrl_pressed_ = false;
-    bool alt_pressed_ = false;
-    bool h_pressed_ = false;
-
-  public:
-    bool process_key_event(int linux_code, int value) {
-        bool is_press = (value == 1);
-        bool is_release = (value == 0);
-
-        // Track modifier key states
-        switch (linux_code) {
-            case KEY_LEFTCTRL:
-            case KEY_RIGHTCTRL:
-                if (is_press)
-                    ctrl_pressed_ = true;
-                else if (is_release)
-                    ctrl_pressed_ = false;
-                break;
-
-            case KEY_LEFTALT:
-            case KEY_RIGHTALT:
-                if (is_press)
-                    alt_pressed_ = true;
-                else if (is_release)
-                    alt_pressed_ = false;
-                break;
-
-            case KEY_H:
-                if (is_press) {
-                    h_pressed_ = true;
-                    // Check if all required keys are pressed
-                    if (ctrl_pressed_ && alt_pressed_ && h_pressed_) {
-                        return true;
-                    }
-                } else if (is_release) {
-                    h_pressed_ = false;
-                }
-                break;
-        }
-
-        return false;
-    }
-
-    std::string get_state_description() const {
-        return "Ctrl: " + std::string(ctrl_pressed_ ? "ON" : "OFF") +
-               ", Alt: " + std::string(alt_pressed_ ? "ON" : "OFF") +
-               ", H: " + std::string(h_pressed_ ? "ON" : "OFF");
-    }
-
-    // Test helper methods
-    bool is_ctrl_pressed() const { return ctrl_pressed_; }
-    bool is_alt_pressed() const { return alt_pressed_; }
-    bool is_h_pressed() const { return h_pressed_; }
-};
+#include "exit_hotkey_detector.hpp"
+#include "test_framework.hpp"
 
 namespace {
 
 void test_individual_keys() {
-    std::cout << "Testing individual key tracking... ";
-
     ExitHotkeyDetector detector;
 
     // Test Ctrl key
@@ -104,13 +42,9 @@ void test_individual_keys() {
     exit_triggered = detector.process_key_event(KEY_H, 0);  // Release
     assert(!exit_triggered);
     assert(!detector.is_h_pressed());
-
-    std::cout << "PASSED\n";
 }
 
 void test_partial_combinations() {
-    std::cout << "Testing partial key combinations... ";
-
     ExitHotkeyDetector detector;
 
     // Test Ctrl+Alt (without H)
@@ -135,8 +69,6 @@ void test_partial_combinations() {
 }
 
 void test_full_combination() {
-    std::cout << "Testing full Alt+Ctrl+H combination... ";
-
     ExitHotkeyDetector detector;
 
     // Press Ctrl first
@@ -155,8 +87,6 @@ void test_full_combination() {
 }
 
 void test_different_key_orders() {
-    std::cout << "Testing different key press orders... ";
-
     // Order: Alt, Ctrl, H
     ExitHotkeyDetector detector1;
     detector1.process_key_event(KEY_LEFTALT, 1);
@@ -181,8 +111,6 @@ void test_different_key_orders() {
 }
 
 void test_right_side_modifiers() {
-    std::cout << "Testing right-side modifier keys... ";
-
     ExitHotkeyDetector detector;
 
     // Test with right Ctrl and right Alt
@@ -195,8 +123,6 @@ void test_right_side_modifiers() {
 }
 
 void test_mixed_modifiers() {
-    std::cout << "Testing mixed left/right modifiers... ";
-
     ExitHotkeyDetector detector;
 
     // Test with left Ctrl and right Alt
@@ -209,8 +135,6 @@ void test_mixed_modifiers() {
 }
 
 void test_key_release_behavior() {
-    std::cout << "Testing key release behavior... ";
-
     ExitHotkeyDetector detector;
 
     // Set up the combination
@@ -230,8 +154,6 @@ void test_key_release_behavior() {
 }
 
 void test_state_description() {
-    std::cout << "Testing state description... ";
-
     ExitHotkeyDetector detector;
 
     std::string state = detector.get_state_description();
@@ -248,8 +170,6 @@ void test_state_description() {
 }
 
 void test_key_repeat() {
-    std::cout << "Testing key repeat behavior... ";
-
     ExitHotkeyDetector detector;
 
     // Set up the combination
@@ -268,23 +188,14 @@ void test_key_repeat() {
 }  // namespace
 
 int main() {
-    std::cout << "=== Exit Hotkey Detector Unit Tests ===\n";
-
-    try {
-        test_individual_keys();
-        test_partial_combinations();
-        test_full_combination();
-        test_different_key_orders();
-        test_right_side_modifiers();
-        test_mixed_modifiers();
-        test_key_release_behavior();
-        test_state_description();
-        test_key_repeat();
-
-        std::cout << "\n=== All hotkey detector tests completed ===\n";
-        return 0;
-    } catch (const std::exception& e) {
-        std::cerr << "Test failed with exception: " << e.what() << "\n";
-        return 1;
-    }
+    return test_framework::run_test_suite("Exit Hotkey Detector Unit Tests",
+                                          {{"individual key tracking", test_individual_keys},
+                                           {"partial combinations", test_partial_combinations},
+                                           {"full combination", test_full_combination},
+                                           {"different key orders", test_different_key_orders},
+                                           {"right side modifiers", test_right_side_modifiers},
+                                           {"mixed modifiers", test_mixed_modifiers},
+                                           {"key release behavior", test_key_release_behavior},
+                                           {"state description", test_state_description},
+                                           {"key repeat", test_key_repeat}});
 }

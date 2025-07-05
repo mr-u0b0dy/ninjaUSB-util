@@ -15,8 +15,6 @@
 namespace {
 
 void test_keyboard_state_basic() {
-    std::cout << "Testing KeyboardState basic functionality... ";
-
     hid::KeyboardState state;
 
     // Initial state should be empty
@@ -32,8 +30,6 @@ void test_keyboard_state_basic() {
 }
 
 void test_modifier_keys() {
-    std::cout << "Testing modifier key handling... ";
-
     hid::KeyboardState state;
 
     // Test Left Ctrl
@@ -63,8 +59,6 @@ void test_modifier_keys() {
 }
 
 void test_regular_keys() {
-    std::cout << "Testing regular key handling... ";
-
     hid::KeyboardState state;
 
     // Press 'A' key (HID code 0x04)
@@ -97,8 +91,6 @@ void test_regular_keys() {
 }
 
 void test_key_rollover() {
-    std::cout << "Testing 6-key rollover limit... ";
-
     hid::KeyboardState state;
 
     // Press 7 keys (more than 6-key rollover limit)
@@ -125,8 +117,6 @@ void test_key_rollover() {
 }
 
 void test_combined_modifiers_and_keys() {
-    std::cout << "Testing combined modifiers and regular keys... ";
-
     hid::KeyboardState state;
 
     // Press Ctrl+Shift+A
@@ -146,8 +136,6 @@ void test_combined_modifiers_and_keys() {
 }
 
 void test_linux_key_mapping() {
-    std::cout << "Testing Linux key event application... ";
-
     hid::KeyboardState state;
 
     // Test KEY_A (Linux code 30)
@@ -177,8 +165,6 @@ void test_linux_key_mapping() {
 }
 
 void test_state_clear() {
-    std::cout << "Testing state clear functionality... ";
-
     hid::KeyboardState state;
 
     // Press multiple keys and modifiers
@@ -205,8 +191,6 @@ void test_state_clear() {
 }
 
 void test_dirty_flag() {
-    std::cout << "Testing dirty flag functionality... ";
-
     hid::KeyboardState state;
 
     // Initial state should be dirty (first report)

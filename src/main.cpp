@@ -58,11 +58,12 @@
 
 #include <libevdev/libevdev.h>
 
-#include "args.hpp"            // Command-line argument parsing
-#include "device_manager.hpp"  // Device enumeration and hot-plug support
-#include "hid_keycodes.hpp"    // HID keyboard mappings and state management
-#include "logger.hpp"          // Logging utilities
-#include "version.hpp"         // Version information
+#include "args.hpp"                  // Command-line argument parsing
+#include "device_manager.hpp"        // Device enumeration and hot-plug support
+#include "exit_hotkey_detector.hpp"  // Exit hotkey detection
+#include "hid_keycodes.hpp"          // HID keyboard mappings and state management
+#include "logger.hpp"                // Logging utilities
+#include "version.hpp"               // Version information
 
 //! @namespace Global application state and configuration
 namespace {
@@ -141,80 +142,6 @@ auto make_report_writer(QLowEnergyService* service, QLowEnergyCharacteristic ch)
         service->writeCharacteristic(ch, data, QLowEnergyService::WriteWithoutResponse);
     };
 }
-
-// ---------------------------------------------------------------------------
-//  Hotkey Detection for Program Exit
-// ---------------------------------------------------------------------------
-
-/**
- * @brief Hotkey combination detector for program exit
- *
- * Detects the Alt+Ctrl+H key combination to provide a safe way to exit
- * the program while capturing keystrokes. This replaces Ctrl+C functionality
- * which is disabled to prevent accidental program termination.
- */
-class ExitHotkeyDetector {
-  private:
-    bool ctrl_pressed_ = false;
-    bool alt_pressed_ = false;
-    bool h_pressed_ = false;
-
-  public:
-    /**
-     * @brief Process a key event and check for exit hotkey combination
-     * @param linux_code Linux input event code
-     * @param value Event value (0=release, 1=press, 2=repeat)
-     * @return true if Alt+Ctrl+H combination is detected
-     */
-    bool process_key_event(int linux_code, int value) {
-        bool is_press = (value == 1);
-        bool is_release = (value == 0);
-
-        // Track modifier key states
-        switch (linux_code) {
-            case KEY_LEFTCTRL:
-            case KEY_RIGHTCTRL:
-                if (is_press)
-                    ctrl_pressed_ = true;
-                else if (is_release)
-                    ctrl_pressed_ = false;
-                break;
-
-            case KEY_LEFTALT:
-            case KEY_RIGHTALT:
-                if (is_press)
-                    alt_pressed_ = true;
-                else if (is_release)
-                    alt_pressed_ = false;
-                break;
-
-            case KEY_H:
-                if (is_press) {
-                    h_pressed_ = true;
-                    // Check if all required keys are pressed
-                    if (ctrl_pressed_ && alt_pressed_ && h_pressed_) {
-                        LOG_INFO("Exit hotkey detected (Alt+Ctrl+H) - stopping program...");
-                        return true;
-                    }
-                } else if (is_release) {
-                    h_pressed_ = false;
-                }
-                break;
-        }
-
-        return false;
-    }
-
-    /**
-     * @brief Get current state description for debugging
-     * @return String describing current modifier states
-     */
-    std::string get_state_description() const {
-        return "Ctrl: " + std::string(ctrl_pressed_ ? "ON" : "OFF") +
-               ", Alt: " + std::string(alt_pressed_ ? "ON" : "OFF") +
-               ", H: " + std::string(h_pressed_ ? "ON" : "OFF");
-    }
-};
 
 // ---------------------------------------------------------------------------
 //  Main Application Entry Point
@@ -652,8 +579,9 @@ int main(int argc, char* argv[]) {
                 }
 
                 // Check for exit hotkey (Alt+Ctrl+H)
-                static ExitHotkeyDetector hotkey_detector;
+                static ExitHotkeyDetector hotkey_detector(true);  // Enable logging
                 if (hotkey_detector.process_key_event(ev.code, ev.value)) {
+                    LOG_INFO("Exit hotkey detected (Alt+Ctrl+H) - stopping program...");
                     // Send empty report to release all keys before exit
                     if (sendReport) {
                         sendReport({0, 0, 0, 0, 0, 0, 0, 0});
