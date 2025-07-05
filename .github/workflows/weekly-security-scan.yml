@@ -142,7 +142,7 @@ jobs:
         pip install --upgrade pip
         
         # Install Python-based security tools
-        pip install safety bandit semgrep
+        pip install safety==1.10.3 bandit==1.7.4 semgrep==0.75.0
         
         # Add venv bin to PATH for subsequent steps
         echo "/tmp/security-tools-venv/bin" >> $GITHUB_PATH
