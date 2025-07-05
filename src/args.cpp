@@ -60,6 +60,7 @@ void ArgumentParser::setup_descriptions() {
         {"-v, --version", "Show version information and exit"},
         {"-V, --verbose", "Enable verbose logging output"},
         {"--list-devices", "List available BLE devices and exit"},
+        {"--disable-auto-connect", "Disable automatic connection to single NinjaUSB device"},
         {"--scan-timeout <ms>", "BLE scan timeout in milliseconds (default: 10000)"},
         {"--poll-interval <ms>", "Input polling interval in milliseconds (default: 1)"},
         {"--target <address>", "Target BLE device address to connect to"},
@@ -100,6 +101,7 @@ std::optional<Options> ArgumentParser::parse() {
     // Parse other options
     opts.verbose = has_flag("-V") || has_flag("--verbose");
     opts.list_devices = has_flag("--list-devices");
+    opts.disable_auto_connect = has_flag("--disable-auto-connect");
 
     // Parse values with validation
     if (auto timeout = get_int_value("--scan-timeout")) {
@@ -142,7 +144,7 @@ std::optional<Options> ArgumentParser::parse() {
 
         // Skip known flags and their values
         if (arg == "-h" || arg == "--help" || arg == "-v" || arg == "--version" || arg == "-V" ||
-            arg == "--verbose" || arg == "--list-devices") {
+            arg == "--verbose" || arg == "--list-devices" || arg == "--disable-auto-connect") {
             continue;
         }
 

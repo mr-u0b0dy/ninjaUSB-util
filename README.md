@@ -41,11 +41,16 @@ sudo ./ninja_util
 ## Usage
 
 ```bash
-./ninja_util --help         # Show all options
-./ninja_util --version      # Show version info
-./ninja_util -V             # Run with verbose logging
-./ninja_util --list-devices # List BLE devices
+./ninja_util --help                # Show all options
+./ninja_util --version             # Show version info
+./ninja_util -V                    # Run with verbose logging
+./ninja_util --list-devices        # List BLE devices
+./ninja_util --disable-auto-connect # Disable auto-connect to single NinjaUSB device
 ```
+
+### Auto-Connect Feature
+
+By default, if exactly one NinjaUSB device is found during scanning, the utility will automatically connect to it. This can be disabled with the `--disable-auto-connect` option if you prefer to manually select devices.
 
 ## Documentation
 

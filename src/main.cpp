@@ -376,12 +376,68 @@ int main(int argc, char* argv[]) {
                 return;
             }
         } else {
-            LOG_INFO("Discovery complete. Choose device number: ");
-            std::cin >> index;
-            if (index < 0 || index >= foundDevices.size()) {
-                LOG_ERROR("Invalid device index");
-                app.quit();
-                return;
+            // Filter NinjaUSB devices
+            QList<QBluetoothDeviceInfo> ninjaDevices;
+            for (const auto& device : foundDevices) {
+                QString deviceName = device.name();
+                if (deviceName.contains("ninja", Qt::CaseInsensitive) ||
+                    deviceName.contains("NinjaUSB", Qt::CaseInsensitive)) {
+                    ninjaDevices.append(device);
+                }
+            }
+
+            // Auto-connect logic
+            if (!g_options.disable_auto_connect && ninjaDevices.size() == 1) {
+                // Auto-connect to the single NinjaUSB device
+                for (int i = 0; i < foundDevices.size(); ++i) {
+                    if (foundDevices[i].address() == ninjaDevices[0].address()) {
+                        index = i;
+                        break;
+                    }
+                }
+                LOG_INFO("Auto-connecting to NinjaUSB device: " + ninjaDevices[0].name().toStdString());
+                if (g_options.verbose) {
+                    LOG_DEBUG("Auto-connect enabled and exactly one NinjaUSB device found");
+                }
+            } else if (ninjaDevices.size() > 1) {
+                // Multiple NinjaUSB devices found, show them to the user
+                LOG_INFO("Multiple NinjaUSB devices found:");
+                for (int i = 0; i < foundDevices.size(); ++i) {
+                    const auto& device = foundDevices[i];
+                    QString deviceName = device.name();
+                    if (deviceName.contains("ninja", Qt::CaseInsensitive) ||
+                        deviceName.contains("NinjaUSB", Qt::CaseInsensitive)) {
+                        LOG_INFO("  " + std::to_string(i) + ": " + device.name().toStdString() + 
+                                " [" + device.address().toString().toStdString() + "]");
+                    }
+                }
+                LOG_INFO("Choose device number: ");
+                std::cin >> index;
+                if (index < 0 || index >= foundDevices.size()) {
+                    LOG_ERROR("Invalid device index");
+                    app.quit();
+                    return;
+                }
+            } else {
+                // No NinjaUSB devices found or auto-connect disabled, show all devices
+                if (g_options.disable_auto_connect && ninjaDevices.size() == 1) {
+                    LOG_INFO("Auto-connect disabled. Please choose from available devices:");
+                } else if (ninjaDevices.empty()) {
+                    LOG_INFO("No NinjaUSB devices found. Available devices:");
+                }
+                
+                for (int i = 0; i < foundDevices.size(); ++i) {
+                    const auto& device = foundDevices[i];
+                    LOG_INFO("  " + std::to_string(i) + ": " + device.name().toStdString() + 
+                            " [" + device.address().toString().toStdString() + "]");
+                }
+                LOG_INFO("Choose device number: ");
+                std::cin >> index;
+                if (index < 0 || index >= foundDevices.size()) {
+                    LOG_ERROR("Invalid device index");
+                    app.quit();
+                    return;
+                }
             }
         }
 

@@ -92,8 +92,18 @@ ninja
 |--------|-------------|---------|
 | `--list-devices` | List available BLE devices and exit | N/A |
 | `--target <address>` | Connect to specific BLE device by MAC address | Interactive selection |
+| `--disable-auto-connect` | Disable automatic connection to single NinjaUSB device | Auto-connect enabled |
 | `--scan-timeout <ms>` | BLE device scan timeout in milliseconds | 10000 |
 | `--poll-interval <ms>` | Input polling interval in milliseconds | 1 |
+
+#### Auto-Connect Feature
+
+By default, ninjaUSB-util implements intelligent device selection:
+
+- **Single NinjaUSB Device**: If exactly one device with "ninja" or "NinjaUSB" in its name is found, the utility automatically connects to it
+- **Multiple NinjaUSB Devices**: If multiple NinjaUSB devices are found, the utility displays only the NinjaUSB devices and prompts for selection
+- **No NinjaUSB Devices**: If no NinjaUSB devices are found, all discovered BLE devices are shown for manual selection
+- **Disable Auto-Connect**: Use `--disable-auto-connect` to always prompt for device selection, even with a single NinjaUSB device
 
 ### Logging Options
 
@@ -118,6 +128,12 @@ ninja
 
 # Connect to specific device by MAC address
 ./ninja_util --target AA:BB:CC:DD:EE:FF
+
+# Disable auto-connect to NinjaUSB devices
+./ninja_util --disable-auto-connect
+
+# Run with verbose logging and disabled auto-connect
+./ninja_util -V --disable-auto-connect
 
 # Adjust scan timeout (default: 10000ms)
 ./ninja_util --scan-timeout 5000
