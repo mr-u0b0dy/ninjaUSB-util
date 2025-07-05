@@ -39,7 +39,7 @@ body:
   - type: checkboxes
     id: issue-type
     attributes:
-      label: 🐛 Issue Type
+      label: Issue Type
       description: What type of documentation issue is this?
       options:
         - label: Information is missing

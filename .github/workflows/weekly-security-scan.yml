@@ -105,6 +105,7 @@ jobs:
           wget \
           python3 \
           python3-pip \
+          python3-venv \
           jq \
           build-essential \
           cmake \
@@ -125,19 +126,53 @@ jobs:
         path: |
           ~/.cache/pip
           /tmp/vuln-db
-        key: vuln-scan-${{ runner.os }}-${{ env.CACHE_VERSION }}-${{ hashFiles('.github/workflows/weekly-maintenance.yml') }}
+          /tmp/security-tools-venv
+        key: vuln-scan-${{ runner.os }}-${{ env.CACHE_VERSION }}-${{ hashFiles('.github/workflows/weekly-security-scan.yml') }}
         restore-keys: |
           vuln-scan-${{ runner.os }}-${{ env.CACHE_VERSION }}-
           vuln-scan-${{ runner.os }}-
 
     - name: Install vulnerability scanning tools
       run: |
-        # Install Python-based security tools
-        pip3 install --user safety bandit semgrep
+        # Create and activate virtual environment for better package management
+        python3 -m venv /tmp/security-tools-venv
+        source /tmp/security-tools-venv/bin/activate
         
-        # Add user bin to PATH
-        export PATH="$HOME/.local/bin:$PATH"
-        echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
+        # Upgrade pip to latest version
+        pip install --upgrade pip
+        
+        # Install Python-based security tools
+        pip install safety bandit semgrep
+        
+        # Add venv bin to PATH for subsequent steps
+        echo "/tmp/security-tools-venv/bin" >> $GITHUB_PATH
+        echo "VIRTUAL_ENV=/tmp/security-tools-venv" >> $GITHUB_ENV
+
+    - name: Verify security tools installation
+      run: |
+        echo "🔧 Verifying security tools installation..."
+        
+        # Check if tools are available and working
+        if command -v safety >/dev/null 2>&1; then
+          echo "✅ Safety installed: $(safety --version)"
+        else
+          echo "❌ Safety not found"
+          exit 1
+        fi
+        
+        if command -v bandit >/dev/null 2>&1; then
+          echo "✅ Bandit installed: $(bandit --version)"
+        else
+          echo "❌ Bandit not found"
+          exit 1
+        fi
+        
+        if command -v semgrep >/dev/null 2>&1; then
+          echo "✅ Semgrep installed: $(semgrep --version)"
+        else
+          echo "❌ Semgrep not found"
+          exit 1
+        fi
 
     - name: System package vulnerability scan
       run: |
