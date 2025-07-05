@@ -87,10 +87,47 @@ The CI pipeline runs these main jobs (see [PIPELINE.md](PIPELINE.md) for details
 3. **Run tests** to verify everything works:
 
    ```bash
-   ctest
+   ctest --output-on-failure
    ```
 
-4. **Test your changes** before submitting
+4. **Test your changes** comprehensively before submitting
+
+## Testing & Quality Assurance
+
+### Unit Testing
+
+Our comprehensive test suite covers all core functionality:
+
+```bash
+# Build and run all tests
+cd build
+cmake .. -DBUILD_TESTS=ON
+make -j$(nproc)
+ctest --output-on-failure --verbose
+```
+
+### Test Coverage
+
+The project maintains excellent test coverage:
+
+- **Device Management**: Keyboard detection, hot-plug events, error handling
+- **Argument Parsing**: All CLI options, validation, edge cases  
+- **HID Processing**: Key mapping, modifier handling, report generation
+- **Signal Handling**: SIGINT filtering, SIGTERM graceful shutdown
+- **BLE Communication**: HID report transmission with comprehensive mocking
+- **System Integration**: Exit hotkey detection, logging functionality
+
+### Adding New Tests
+
+When implementing new features:
+
+1. **Create test file**: `tests/test_[feature_name].cpp`
+2. **Add to CMakeLists.txt**: Include in `BUILD_TESTS` section
+3. **Follow test patterns**: Use existing tests as templates
+4. **Test edge cases**: Include error conditions and boundary values
+5. **Verify integration**: Run full test suite to ensure no regressions
+
+See [TESTING.md](TESTING.md) for detailed testing procedures.
 
 ## Project Structure
 
@@ -108,8 +145,13 @@ ninjaUSB-util/
 │       ├── logger.hpp
 │       └── hid_keycodes.hpp
 ├── tests/                 # Unit tests
-│   ├── test_device_manager.cpp
-│   └── test_args.cpp
+│   ├── test_device_manager.cpp    # Device management tests
+│   ├── test_args.cpp              # Argument parsing tests
+│   ├── test_hid_keycodes.cpp      # HID keyboard mapping tests
+│   ├── test_logger.cpp            # Logging system tests
+│   ├── test_hotkey_detector.cpp   # Exit hotkey detection tests
+│   ├── test_signal_handler.cpp    # Signal handling tests
+│   └── test_make_report_writer.cpp # BLE report writing tests
 ├── doc/                   # Documentation
 │   ├── VERSIONING.md
 │   ├── DEVELOPMENT.md

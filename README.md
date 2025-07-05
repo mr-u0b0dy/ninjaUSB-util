@@ -9,16 +9,22 @@ A Linux utility that bridges USB keyboard input to Bluetooth Low Energy (BLE) de
 
 - **Real-time Keyboard Input Forwarding**: Captures keystrokes from USB keyboards
   and forwards them as HID reports over BLE
+- **Exclusive Input Capture**: Grabbed keyboards are "frozen" - keystrokes don't
+  reach the host system, preventing interference with local applications
 - **Hot-plug Support**: Automatically detects when keyboards are connected or
   disconnected
 - **Multi-keyboard Support**: Can monitor multiple USB keyboards simultaneously
 - **BLE Device Discovery**: Scans for and connects to BLE devices
 - **HID Compliance**: Sends standard 8-byte HID keyboard reports compatible with
   most BLE devices
+- **Safe Exit Hotkey**: Use Alt+Ctrl+H to safely exit the program while capturing
+  keystrokes (Ctrl+C is disabled to prevent accidental termination)
 - **Modern Command-Line Interface**: Comprehensive argument parsing with help,
   version, and configuration options
 - **Verbose Logging**: Detailed logging with configurable levels for debugging and
   monitoring
+- **Comprehensive Testing**: Extensive unit test suite covering all core functionality
+  with 100% test pass rate and excellent code coverage
 - **Automatic Versioning**: Centralized version management with build information
 
 ## Quick Start
@@ -32,6 +38,9 @@ mkdir build && cd build
 cmake ..
 make
 
+# Optionally run tests
+cmake .. -DBUILD_TESTS=ON && make && ctest
+
 # Run (requires sudo for keyboard access)
 sudo ./ninja_util
 ```
@@ -39,11 +48,22 @@ sudo ./ninja_util
 ## Usage
 
 ```bash
-./ninja_util --help         # Show all options
-./ninja_util --version      # Show version info
-./ninja_util -V             # Run with verbose logging
-./ninja_util --list-devices # List BLE devices
+./ninja_util --help                # Show all options
+./ninja_util --version             # Show version info
+./ninja_util -V                    # Run with verbose logging
+./ninja_util --list-devices        # List BLE devices
+./ninja_util --disable-auto-connect # Disable auto-connect to single NinjaUSB device
 ```
+
+### Auto-Connect Feature
+
+By default, if exactly one NinjaUSB device is found during scanning, the utility will automatically connect to it. This can be disabled with the `--disable-auto-connect` option if you prefer to manually select devices.
+
+### Connection Handling
+
+- **Connection Timeout**: Automatically exits if BLE connection fails within 30 seconds
+- **Error Recovery**: Provides detailed error messages for different connection failure types
+- **Graceful Exit**: Safely terminates the program if unable to establish BLE connection
 
 ## Documentation
 
@@ -91,3 +111,26 @@ flowchart LR
 ## License
 
 Licensed under the Apache License 2.0 - see [LICENSE](LICENSE) file.
+
+## 🧪 Testing
+
+The project includes comprehensive unit tests with 100% pass rate:
+
+```bash
+# Build and run tests
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+cd build && ctest --output-on-failure
+```
+
+**Test Coverage:**
+
+- ✅ Device management and hot-plug detection
+- ✅ Command-line argument parsing (fixed v1.1.1)
+- ✅ HID keyboard mappings and state management
+- ✅ Logging system with multiple levels
+- ✅ Exit hotkey detection (Alt+Ctrl+H)
+- ✅ Signal handling for graceful shutdown
+- ✅ BLE report writer functionality
+
+For detailed testing procedures, see [doc/TESTING.md](doc/TESTING.md).

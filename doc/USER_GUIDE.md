@@ -92,8 +92,18 @@ ninja
 |--------|-------------|---------|
 | `--list-devices` | List available BLE devices and exit | N/A |
 | `--target <address>` | Connect to specific BLE device by MAC address | Interactive selection |
+| `--disable-auto-connect` | Disable automatic connection to single NinjaUSB device | Auto-connect enabled |
 | `--scan-timeout <ms>` | BLE device scan timeout in milliseconds | 10000 |
 | `--poll-interval <ms>` | Input polling interval in milliseconds | 1 |
+
+#### Auto-Connect Feature
+
+By default, ninjaUSB-util implements intelligent device selection:
+
+- **Single NinjaUSB Device**: If exactly one device with "ninja" or "NinjaUSB" in its name is found, the utility automatically connects to it
+- **Multiple NinjaUSB Devices**: If multiple NinjaUSB devices are found, the utility displays only the NinjaUSB devices and prompts for selection
+- **No NinjaUSB Devices**: If no NinjaUSB devices are found, all discovered BLE devices are shown for manual selection
+- **Disable Auto-Connect**: Use `--disable-auto-connect` to always prompt for device selection, even with a single NinjaUSB device
 
 ### Logging Options
 
@@ -118,6 +128,12 @@ ninja
 
 # Connect to specific device by MAC address
 ./ninja_util --target AA:BB:CC:DD:EE:FF
+
+# Disable auto-connect to NinjaUSB devices
+./ninja_util --disable-auto-connect
+
+# Run with verbose logging and disabled auto-connect
+./ninja_util -V --disable-auto-connect
 
 # Adjust scan timeout (default: 10000ms)
 ./ninja_util --scan-timeout 5000
@@ -148,7 +164,77 @@ ninja
 4. **Start Typing**: Once connected, keyboard input will be forwarded to the
    selected BLE device
 
-5. **Exit**: Press Ctrl+C to quit the application gracefully
+5. **Exit**: Use **Alt+Ctrl+H** to safely exit the application. Ctrl+C is disabled
+   to prevent accidental termination while capturing keystrokes.
+
+## Keyboard Controls
+
+While the program is running and capturing keystrokes:
+
+- **Alt+Ctrl+H**: Safe exit hotkey - stops HID reports and exits the program
+- **Ctrl+C**: Disabled to prevent accidental program termination
+- **SIGTERM**: Can still be used to terminate the program externally
+
+> **Important**: Use Alt+Ctrl+H to exit safely. This ensures all keys are properly
+> released before the program terminates, preventing stuck keys on the target device.
+
+## Exclusive Input Capture
+
+ninjaUSB-util implements exclusive device access to prevent captured keystrokes from interfering with the host system:
+
+### Device Behavior
+
+- **Device Grabbing**: When a keyboard is captured, ninjaUSB-util obtains exclusive access using `libevdev_grab()`
+- **Input Isolation**: Captured keystrokes are intercepted before reaching the host system
+- **Clean Release**: Exclusive access is automatically released when the program exits or a device is disconnected
+
+### Benefits
+
+- **No Host Interference**: Keystrokes sent to the BLE device don't appear on the local system
+- **Secure Input**: Prevents password leakage or accidental commands on the host
+- **KVM-like Behavior**: True input switching between host and target device
+
+### Error Handling
+
+- If exclusive access fails, the program continues to work but logs a warning
+- Keystrokes may "leak" to the host system if grabbing fails
+
+## BLE Connection Management
+
+### Connection Process
+
+1. **Device Discovery**: Scans for BLE devices using the configured timeout
+2. **Device Selection**: Automatic selection for single NinjaUSB devices or manual selection
+3. **Connection Attempt**: Establishes BLE connection with 30-second timeout
+4. **Service Discovery**: Discovers GATT services and characteristics
+5. **Ready State**: Begins forwarding keyboard input as HID reports
+
+### Connection Error Handling
+
+The utility provides robust error handling for BLE connection issues:
+
+#### Connection Timeout
+
+- **Duration**: 30 seconds maximum connection time
+- **Behavior**: Program exits with clear error message if connection fails
+- **Verbose Mode**: Shows detailed connection state changes
+
+#### Error Types
+
+- **Network Error**: Bluetooth adapter or network connectivity issues
+- **Connection Error**: Device unavailable or connection refused
+- **Authorization Error**: Bluetooth pairing or permission issues
+- **Remote Host Closed**: Target device disconnected during connection
+- **Invalid Adapter**: Bluetooth adapter not available or disabled
+
+#### Recovery Actions
+
+- **Automatic Exit**: Program terminates gracefully on connection failure
+- **Clear Messaging**: Detailed error descriptions for troubleshooting
+- **Resource Cleanup**: Proper cleanup of allocated resources before exit
+- This typically happens due to insufficient permissions or device conflicts
+
+> **Note**: Exclusive access requires the program to run with appropriate permissions (typically root) to access input devices.
 
 ## Supported Keys
 

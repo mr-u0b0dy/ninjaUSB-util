@@ -170,6 +170,30 @@ if(BUILD_TESTS)
         src/logger.cpp
     )
     
+    add_executable(test_hid_keycodes
+        tests/test_hid_keycodes.cpp
+        src/logger.cpp
+    )
+    
+    add_executable(test_logger
+        tests/test_logger.cpp
+        src/logger.cpp
+    )
+    
+    add_executable(test_hotkey_detector
+        tests/test_hotkey_detector.cpp
+    )
+    
+    add_executable(test_signal_handler
+        tests/test_signal_handler.cpp
+        src/logger.cpp
+    )
+    
+    add_executable(test_make_report_writer
+        tests/test_make_report_writer.cpp
+        src/logger.cpp
+    )
+    
     target_include_directories(
         test_device_manager PRIVATE 
         src/inc 
@@ -190,7 +214,47 @@ if(BUILD_TESTS)
         ${CMAKE_CURRENT_BINARY_DIR}/include
     )
     
+    target_include_directories(
+        test_hid_keycodes PRIVATE 
+        src/inc
+        ${CMAKE_CURRENT_BINARY_DIR}/include
+    )
+    
+    target_include_directories(
+        test_logger PRIVATE 
+        src/inc
+        ${CMAKE_CURRENT_BINARY_DIR}/include
+    )
+    
+    target_include_directories(
+        test_hotkey_detector PRIVATE 
+        src/inc
+        ${CMAKE_CURRENT_BINARY_DIR}/include
+    )
+    
+    target_include_directories(
+        test_signal_handler PRIVATE 
+        src/inc
+        ${CMAKE_CURRENT_BINARY_DIR}/include
+    )
+    
+    target_include_directories(
+        test_make_report_writer PRIVATE 
+        src/inc
+        ${CMAKE_CURRENT_BINARY_DIR}/include
+    )
+    
+    target_link_libraries(
+        test_make_report_writer PRIVATE 
+        ${QT_LIBRARIES}
+    )
+    
     enable_testing()
     add_test(NAME device_manager_tests COMMAND test_device_manager)
     add_test(NAME args_tests COMMAND test_args)
+    add_test(NAME hid_keycodes_tests COMMAND test_hid_keycodes)
+    add_test(NAME logger_tests COMMAND test_logger)
+    add_test(NAME hotkey_detector_tests COMMAND test_hotkey_detector)
+    add_test(NAME signal_handler_tests COMMAND test_signal_handler)
+    add_test(NAME make_report_writer_tests COMMAND test_make_report_writer)
 endif()

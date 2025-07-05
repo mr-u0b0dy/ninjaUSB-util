@@ -58,11 +58,12 @@
 
 #include <libevdev/libevdev.h>
 
-#include "args.hpp"            // Command-line argument parsing
-#include "device_manager.hpp"  // Device enumeration and hot-plug support
-#include "hid_keycodes.hpp"    // HID keyboard mappings and state management
-#include "logger.hpp"          // Logging utilities
-#include "version.hpp"         // Version information
+#include "args.hpp"                  // Command-line argument parsing
+#include "device_manager.hpp"        // Device enumeration and hot-plug support
+#include "exit_hotkey_detector.hpp"  // Exit hotkey detection
+#include "hid_keycodes.hpp"          // HID keyboard mappings and state management
+#include "logger.hpp"                // Logging utilities
+#include "version.hpp"               // Version information
 
 //! @namespace Global application state and configuration
 namespace {
@@ -88,13 +89,19 @@ std::atomic<bool> g_running{true};
  * @brief Signal handler for graceful shutdown
  * @param signum Signal number (SIGINT, SIGTERM, etc.)
  *
- * Sets the global running flag to false, causing the main event loop
- * to exit cleanly. This allows proper cleanup of resources and connections.
+ * Handles signals differently:
+ * - SIGINT (Ctrl+C): Ignored to prevent accidental exit during key capture
+ * - SIGTERM: Still triggers graceful shutdown
  *
  * @note This function is called from signal context and must be signal-safe.
  *       Only async-signal-safe functions should be used here.
  */
 void signal_handler(int signum) {
+    if (signum == SIGINT) {
+        // Ignore Ctrl+C to prevent accidental program termination during key capture
+        return;
+    }
+
     LOG_INFO("Caught signal " + std::to_string(signum) + ", exiting...");
     g_running = false;
 }
@@ -133,13 +140,6 @@ auto make_report_writer(QLowEnergyService* service, QLowEnergyCharacteristic ch)
         // Convert HID report to QByteArray and transmit
         QByteArray data(reinterpret_cast<const char*>(report.data()), 8);
         service->writeCharacteristic(ch, data, QLowEnergyService::WriteWithoutResponse);
-
-        if (g_options.verbose) {
-            LOG_DEBUG("Sent HID report: " + std::to_string(report[0]) + " " +
-                      std::to_string(report[2]) + " " + std::to_string(report[3]) + " " +
-                      std::to_string(report[4]) + " " + std::to_string(report[5]) + " " +
-                      std::to_string(report[6]) + " " + std::to_string(report[7]));
-        }
     };
 }
 
@@ -215,7 +215,12 @@ int main(int argc, char* argv[]) {
     }
 
     // Configure logging
-    logging::Logger::set_level(g_options.log_level);
+    if (g_options.verbose) {
+        // Enable debug level logging in verbose mode
+        logging::Logger::set_level("debug");
+    } else {
+        logging::Logger::set_level(g_options.log_level);
+    }
     logging::Logger::enable_timestamps(g_options.verbose);
 
     if (g_options.verbose) {
@@ -236,7 +241,9 @@ int main(int argc, char* argv[]) {
     }
 
     LOG_INFO("Found " + std::to_string(keyboard_manager.device_count()) + " keyboard(s)");
-    LOG_DEBUG("Monitoring keyboards (hot-plug supported)...");
+    if (g_options.verbose) {
+        LOG_DEBUG("Monitoring keyboards (hot-plug supported)...");
+    }
 
     hid::KeyboardState kb_state;
 
@@ -300,12 +307,69 @@ int main(int argc, char* argv[]) {
                 return;
             }
         } else {
-            LOG_INFO("Discovery complete. Choose device number: ");
-            std::cin >> index;
-            if (index < 0 || index >= foundDevices.size()) {
-                LOG_ERROR("Invalid device index");
-                app.quit();
-                return;
+            // Filter NinjaUSB devices
+            QList<QBluetoothDeviceInfo> ninjaDevices;
+            for (const auto& device : foundDevices) {
+                QString deviceName = device.name();
+                if (deviceName.contains("ninja", Qt::CaseInsensitive) ||
+                    deviceName.contains("NinjaUSB", Qt::CaseInsensitive)) {
+                    ninjaDevices.append(device);
+                }
+            }
+
+            // Auto-connect logic
+            if (!g_options.disable_auto_connect && ninjaDevices.size() == 1) {
+                // Auto-connect to the single NinjaUSB device
+                for (int i = 0; i < foundDevices.size(); ++i) {
+                    if (foundDevices[i].address() == ninjaDevices[0].address()) {
+                        index = i;
+                        break;
+                    }
+                }
+                LOG_INFO("Auto-connecting to NinjaUSB device: " +
+                         ninjaDevices[0].name().toStdString());
+                if (g_options.verbose) {
+                    LOG_DEBUG("Auto-connect enabled and exactly one NinjaUSB device found");
+                }
+            } else if (ninjaDevices.size() > 1) {
+                // Multiple NinjaUSB devices found, show them to the user
+                LOG_INFO("Multiple NinjaUSB devices found:");
+                for (int i = 0; i < foundDevices.size(); ++i) {
+                    const auto& device = foundDevices[i];
+                    QString deviceName = device.name();
+                    if (deviceName.contains("ninja", Qt::CaseInsensitive) ||
+                        deviceName.contains("NinjaUSB", Qt::CaseInsensitive)) {
+                        LOG_INFO("  " + std::to_string(i) + ": " + device.name().toStdString() +
+                                 " [" + device.address().toString().toStdString() + "]");
+                    }
+                }
+                LOG_INFO("Choose device number: ");
+                std::cin >> index;
+                if (index < 0 || index >= foundDevices.size()) {
+                    LOG_ERROR("Invalid device index");
+                    app.quit();
+                    return;
+                }
+            } else {
+                // No NinjaUSB devices found or auto-connect disabled, show all devices
+                if (g_options.disable_auto_connect && ninjaDevices.size() == 1) {
+                    LOG_INFO("Auto-connect disabled. Please choose from available devices:");
+                } else if (ninjaDevices.empty()) {
+                    LOG_INFO("No NinjaUSB devices found. Available devices:");
+                }
+
+                for (int i = 0; i < foundDevices.size(); ++i) {
+                    const auto& device = foundDevices[i];
+                    LOG_INFO("  " + std::to_string(i) + ": " + device.name().toStdString() + " [" +
+                             device.address().toString().toStdString() + "]");
+                }
+                LOG_INFO("Choose device number: ");
+                std::cin >> index;
+                if (index < 0 || index >= foundDevices.size()) {
+                    LOG_ERROR("Invalid device index");
+                    app.quit();
+                    return;
+                }
             }
         }
 
@@ -324,35 +388,118 @@ int main(int argc, char* argv[]) {
             app.quit();
         });
 
+        // Handle connection errors
+        QObject::connect(
+            controller,
+            QOverload<QLowEnergyController::Error>::of(&QLowEnergyController::errorOccurred),
+            [&](QLowEnergyController::Error error) {
+                QString errorString;
+                switch (error) {
+                    case QLowEnergyController::NoError:
+                        return;  // No error, continue
+                    case QLowEnergyController::UnknownError:
+                        errorString = "Unknown error";
+                        break;
+                    case QLowEnergyController::UnknownRemoteDeviceError:
+                        errorString = "Unknown remote device error";
+                        break;
+                    case QLowEnergyController::NetworkError:
+                        errorString = "Network error";
+                        break;
+                    case QLowEnergyController::InvalidBluetoothAdapterError:
+                        errorString = "Invalid Bluetooth adapter";
+                        break;
+                    case QLowEnergyController::ConnectionError:
+                        errorString = "Connection error";
+                        break;
+                    case QLowEnergyController::AdvertisingError:
+                        errorString = "Advertising error";
+                        break;
+                    case QLowEnergyController::RemoteHostClosedError:
+                        errorString = "Remote host closed connection";
+                        break;
+                    case QLowEnergyController::AuthorizationError:
+                        errorString = "Authorization error";
+                        break;
+                    default:
+                        errorString = "Error code: " + QString::number(static_cast<int>(error));
+                        break;
+                }
+                LOG_ERROR("BLE connection failed: " + errorString.toStdString());
+                g_running = false;
+                app.quit();
+            });
+
+        // Handle connection state changes
+        QObject::connect(controller, &QLowEnergyController::stateChanged,
+                         [&](QLowEnergyController::ControllerState state) {
+                             if (g_options.verbose) {
+                                 QString stateString;
+                                 switch (state) {
+                                     case QLowEnergyController::UnconnectedState:
+                                         stateString = "Unconnected";
+                                         break;
+                                     case QLowEnergyController::ConnectingState:
+                                         stateString = "Connecting";
+                                         break;
+                                     case QLowEnergyController::ConnectedState:
+                                         stateString = "Connected";
+                                         break;
+                                     case QLowEnergyController::DiscoveringState:
+                                         stateString = "Discovering";
+                                         break;
+                                     case QLowEnergyController::DiscoveredState:
+                                         stateString = "Discovered";
+                                         break;
+                                     case QLowEnergyController::ClosingState:
+                                         stateString = "Closing";
+                                         break;
+                                     case QLowEnergyController::AdvertisingState:
+                                         stateString = "Advertising";
+                                         break;
+                                     default:
+                                         stateString = "Unknown state: " +
+                                                       QString::number(static_cast<int>(state));
+                                         break;
+                                 }
+                                 LOG_DEBUG("BLE Controller state: " + stateString.toStdString());
+                             }
+                         });
+
         QObject::connect(controller, &QLowEnergyController::serviceDiscovered,
                          [&](const QBluetoothUuid& uuid) {
-                             LOG_DEBUG("Service discovered: " + uuid.toString().toStdString());
+                             if (g_options.verbose) {
+                                 LOG_DEBUG("Service discovered: " + uuid.toString().toStdString());
+                             }
                          });
 
         QObject::connect(controller, &QLowEnergyController::discoveryFinished, [&]() {
-            LOG_DEBUG("Service discovery finished");
+            if (g_options.verbose) {
+                LOG_DEBUG("Service discovery finished");
+            }
             // Pick first service and search for writable char
             for (const QBluetoothUuid& uuid : controller->services()) {
                 service = controller->createServiceObject(uuid);
                 if (!service)
                     continue;
 
-                QObject::connect(service, &QLowEnergyService::stateChanged,
-                                 [&](QLowEnergyService::ServiceState s) {
-                                     if (s != QLowEnergyService::RemoteServiceDiscovered)
-                                         return;
-                                     for (const auto& c : service->characteristics()) {
-                                         if (c.properties() &
-                                             (QLowEnergyCharacteristic::Write |
-                                              QLowEnergyCharacteristic::WriteNoResponse)) {
-                                             targetChar = c;
-                                             sendReport = make_report_writer(service, targetChar);
-                                             LOG_INFO("✔ Found writable characteristic: " +
-                                                      c.uuid().toString().toStdString());
-                                             LOG_INFO("Ready! Start typing – Ctrl+C to quit.");
-                                         }
-                                     }
-                                 });
+                QObject::connect(
+                    service, &QLowEnergyService::stateChanged,
+                    [&](QLowEnergyService::ServiceState s) {
+                        if (s != QLowEnergyService::RemoteServiceDiscovered)
+                            return;
+                        for (const auto& c : service->characteristics()) {
+                            if (c.properties() & (QLowEnergyCharacteristic::Write |
+                                                  QLowEnergyCharacteristic::WriteNoResponse)) {
+                                targetChar = c;
+                                sendReport = make_report_writer(service, targetChar);
+                                LOG_INFO("✔ Found writable characteristic: " +
+                                         c.uuid().toString().toStdString());
+                                LOG_INFO(
+                                    "Ready! Start typing – Alt+Ctrl+H to quit (Ctrl+C disabled).");
+                            }
+                        }
+                    });
                 service->discoverDetails();
                 if (targetChar.isValid())
                     break;
@@ -362,6 +509,27 @@ int main(int argc, char* argv[]) {
                 app.quit();
             }
         });
+
+        // Set up connection timeout (30 seconds)
+        QTimer* connectionTimer = new QTimer();
+        connectionTimer->setSingleShot(true);
+        connectionTimer->setInterval(30000);  // 30 seconds
+
+        QObject::connect(connectionTimer, &QTimer::timeout, [&, connectionTimer]() {
+            LOG_ERROR("BLE connection timeout - failed to connect within 30 seconds");
+            connectionTimer->deleteLater();
+            g_running = false;
+            app.quit();
+        });
+
+        // Stop timer when connected successfully
+        QObject::connect(controller, &QLowEnergyController::connected, [connectionTimer]() {
+            connectionTimer->stop();
+            connectionTimer->deleteLater();
+        });
+
+        // Start connection timeout timer before attempting connection
+        connectionTimer->start();
         controller->connectToDevice();
     });
 
@@ -410,11 +578,42 @@ int main(int argc, char* argv[]) {
                               std::to_string(ev.value) + " from " + keyboards[i].name());
                 }
 
+                // Check for exit hotkey (Alt+Ctrl+H)
+                static ExitHotkeyDetector hotkey_detector(true);  // Enable logging
+                if (hotkey_detector.process_key_event(ev.code, ev.value)) {
+                    LOG_INFO("Exit hotkey detected (Alt+Ctrl+H) - stopping program...");
+                    // Send empty report to release all keys before exit
+                    if (sendReport) {
+                        sendReport({0, 0, 0, 0, 0, 0, 0, 0});
+                        if (g_options.verbose) {
+                            LOG_DEBUG("Sent empty HID report before exit");
+                        }
+                    }
+                    LOG_INFO("Stopping HID reports and exiting...");
+                    g_running = false;
+                    app.quit();
+                    return;
+                }
+
+                if (g_options.verbose) {
+                    LOG_DEBUG("Hotkey state: " + hotkey_detector.get_state_description());
+                }
+
                 switch (ev.value) {
                     case 1:  // key down
                     case 2:  // auto-repeat
                         if (hid::apply_key_event(kb_state, ev.code, ev.value)) {
-                            sendReport(kb_state.get_report());
+                            auto report = kb_state.get_report();
+                            sendReport(report);
+                            if (g_options.verbose) {
+                                LOG_DEBUG(
+                                    "Sent HID report: [" + std::to_string(report[0]) + ", " +
+                                    std::to_string(report[1]) + ", " + std::to_string(report[2]) +
+                                    ", " + std::to_string(report[3]) + ", " +
+                                    std::to_string(report[4]) + ", " + std::to_string(report[5]) +
+                                    ", " + std::to_string(report[6]) + ", " +
+                                    std::to_string(report[7]) + "]");
+                            }
                         }
                         break;
                     case 0:  // key release
@@ -422,6 +621,9 @@ int main(int argc, char* argv[]) {
                             hid::apply_key_event(kb_state, ev.code, ev.value);
                         // Send all-zero release report to stop the key
                         sendReport({0, 0, 0, 0, 0, 0, 0, 0});
+                        if (g_options.verbose) {
+                            LOG_DEBUG("Sent key release HID report: [0, 0, 0, 0, 0, 0, 0, 0]");
+                        }
                         break;
                 }
             }

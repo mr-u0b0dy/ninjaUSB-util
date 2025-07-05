@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: 💬 GitHub Discussions
-    url: https://github.com/your-username/ninjaUSB-util/discussions
+    url: https://github.com/mr-u0b0dy/ninjaUSB-util/discussions
     about: Ask questions and discuss ideas with the community
   - name: 📖 Documentation
-    url: https://github.com/your-username/ninjaUSB-util/tree/main/doc
+    url: https://github.com/mr-u0b0dy/ninjaUSB-util/tree/main/doc
     about: Read the documentation before reporting issues
   - name: 🔍 Existing Issues
-    url: https://github.com/your-username/ninjaUSB-util/issues
+    url: https://github.com/mr-u0b0dy/ninjaUSB-util/issues
     about: Search existing issues before creating a new one
