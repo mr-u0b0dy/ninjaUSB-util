@@ -9,6 +9,8 @@ A Linux utility that bridges USB keyboard input to Bluetooth Low Energy (BLE) de
 
 - **Real-time Keyboard Input Forwarding**: Captures keystrokes from USB keyboards
   and forwards them as HID reports over BLE
+- **Exclusive Input Capture**: Grabbed keyboards are "frozen" - keystrokes don't
+  reach the host system, preventing interference with local applications
 - **Hot-plug Support**: Automatically detects when keyboards are connected or
   disconnected
 - **Multi-keyboard Support**: Can monitor multiple USB keyboards simultaneously

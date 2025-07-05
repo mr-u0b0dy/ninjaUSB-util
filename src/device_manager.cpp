@@ -124,6 +124,14 @@ KeyboardDevice::KeyboardDevice(const std::string& device_path)
         return;
     }
 
+    // Grab exclusive access to prevent keystrokes from reaching the host system
+    if (libevdev_grab(evdev_, LIBEVDEV_GRAB) < 0) {
+        log_error("Failed to grab exclusive access to device: " + device_path + " (" + std::strerror(errno) + ")");
+        // Continue anyway - device will work but keystrokes may leak to host
+    } else {
+        log_debug("Grabbed exclusive access to keyboard: " + device_path);
+    }
+
     // Cache device name
     const char* dev_name = libevdev_get_name(evdev_);
     name_ = dev_name ? dev_name : "Unknown Device";
@@ -199,6 +207,8 @@ KeyboardDevice& KeyboardDevice::operator=(KeyboardDevice&& other) noexcept {
  */
 void KeyboardDevice::cleanup() noexcept {
     if (evdev_) {
+        // Release exclusive access before freeing
+        libevdev_grab(evdev_, LIBEVDEV_UNGRAB);
         libevdev_free(evdev_);
         evdev_ = nullptr;
     }

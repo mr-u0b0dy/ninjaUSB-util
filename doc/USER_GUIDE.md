@@ -178,6 +178,30 @@ While the program is running and capturing keystrokes:
 > **Important**: Use Alt+Ctrl+H to exit safely. This ensures all keys are properly
 > released before the program terminates, preventing stuck keys on the target device.
 
+## Exclusive Input Capture
+
+ninjaUSB-util implements exclusive device access to prevent captured keystrokes from interfering with the host system:
+
+### Device Behavior
+
+- **Device Grabbing**: When a keyboard is captured, ninjaUSB-util obtains exclusive access using `libevdev_grab()`
+- **Input Isolation**: Captured keystrokes are intercepted before reaching the host system
+- **Clean Release**: Exclusive access is automatically released when the program exits or a device is disconnected
+
+### Benefits
+
+- **No Host Interference**: Keystrokes sent to the BLE device don't appear on the local system
+- **Secure Input**: Prevents password leakage or accidental commands on the host
+- **KVM-like Behavior**: True input switching between host and target device
+
+### Error Handling
+
+- If exclusive access fails, the program continues to work but logs a warning
+- Keystrokes may "leak" to the host system if grabbing fails
+- This typically happens due to insufficient permissions or device conflicts
+
+> **Note**: Exclusive access requires the program to run with appropriate permissions (typically root) to access input devices.
+
 ## Supported Keys
 
 The utility supports a comprehensive set of keyboard keys including:
