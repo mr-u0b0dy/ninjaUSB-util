@@ -95,6 +95,7 @@ add_executable(${PROJECT_NAME}
     src/device_manager.cpp
     src/args.cpp
     src/logger.cpp
+    src/ble_hid_service_manager.cpp
 )
 
 target_include_directories(
@@ -194,6 +195,11 @@ if(BUILD_TESTS)
         src/logger.cpp
     )
     
+    add_executable(test_ble_hid_service_manager
+        tests/test_ble_hid_service_manager_simple.cpp
+        src/logger.cpp
+    )
+    
     target_include_directories(
         test_device_manager PRIVATE 
         src/inc 
@@ -244,6 +250,12 @@ if(BUILD_TESTS)
         ${CMAKE_CURRENT_BINARY_DIR}/include
     )
     
+    target_include_directories(
+        test_ble_hid_service_manager PRIVATE 
+        src/inc
+        ${CMAKE_CURRENT_BINARY_DIR}/include
+    )
+    
     target_link_libraries(
         test_make_report_writer PRIVATE 
         ${QT_LIBRARIES}
@@ -257,4 +269,5 @@ if(BUILD_TESTS)
     add_test(NAME hotkey_detector_tests COMMAND test_hotkey_detector)
     add_test(NAME signal_handler_tests COMMAND test_signal_handler)
     add_test(NAME make_report_writer_tests COMMAND test_make_report_writer)
+    add_test(NAME ble_hid_service_manager_tests COMMAND test_ble_hid_service_manager)
 endif()
