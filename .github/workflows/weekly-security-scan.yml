@@ -47,6 +47,7 @@ jobs:
           sort -V | tail -3
 
     - name: Check CMake updates
+      shell: bash
       run: |
         echo "🔄 Checking for CMake updates..."
         
@@ -133,6 +134,7 @@ jobs:
           vuln-scan-${{ runner.os }}-
 
     - name: Install vulnerability scanning tools
+      shell: bash
       run: |
         # Create and activate virtual environment for better package management
         python3 -m venv /tmp/security-tools-venv
@@ -149,6 +151,8 @@ jobs:
         echo "VIRTUAL_ENV=/tmp/security-tools-venv" >> $GITHUB_ENV
 
     - name: Verify security tools installation
+      shell: bash
+      timeout-minutes: 5
       run: |
         echo "🔧 Verifying security tools installation..."
         
@@ -174,19 +178,50 @@ jobs:
           exit 1
         fi
 
+    - name: Workflow health check
+      shell: bash
+      timeout-minutes: 2
+      run: |
+        echo "🩺 Performing workflow health check..."
+        
+        # Check Python environment
+        echo "Python version: $(python3 --version)"
+        echo "Pip version: $(pip --version)"
+        echo "Virtual environment: ${VIRTUAL_ENV:-Not set}"
+        
+        # Check disk space
+        echo "Disk space:"
+        df -h /tmp | tail -1
+        
+        # Check available memory
+        echo "Memory usage:"
+        free -h | head -2
+        
+        # Verify PATH includes our tools
+        echo "Security tools in PATH:"
+        echo "  Safety: $(which safety 2>/dev/null || echo 'Not found')"
+        echo "  Bandit: $(which bandit 2>/dev/null || echo 'Not found')"
+        echo "  Semgrep: $(which semgrep 2>/dev/null || echo 'Not found')"
+        
+        echo "✅ Workflow health check completed"
+
     - name: System package vulnerability scan
+      shell: bash
+      timeout-minutes: 5
       run: |
         echo "🔍 Scanning system packages for vulnerabilities..."
         
         # Check for known vulnerable packages
         echo "Current system packages that might have vulnerabilities:"
-        dpkg -l | grep -E "(openssl|glibc|zlib|curl|git)" | head -10
+        dpkg -l | grep -E "(openssl|glibc|zlib|curl|git)" | head -10 || echo "No vulnerable packages found"
         
         # Check Ubuntu security updates
         echo "Checking for security updates..."
         apt list --upgradable 2>/dev/null | grep -i security | head -10 || echo "No security updates available"
 
     - name: Dependency vulnerability scan with Safety
+      shell: bash
+      timeout-minutes: 10
       run: |
         echo "🔍 Scanning Python dependencies with Safety..."
         
@@ -199,49 +234,61 @@ jobs:
         urllib3
         EOF
         
-        # Run safety scan
+        # Run safety scan with better error handling
         if command -v safety >/dev/null 2>&1; then
+          echo "Running safety scan..."
           safety check --file /tmp/requirements.txt --json > safety_report.json 2>/dev/null || {
             echo "Safety scan completed with warnings"
             cat safety_report.json 2>/dev/null || echo "No JSON report generated"
           }
+          echo "Safety scan completed."
         else
-          echo "Safety tool not available"
+          echo "⚠️ Safety tool not available"
         fi
 
     - name: Source code security scan with Bandit
+      shell: bash
+      timeout-minutes: 10
       run: |
         echo "🔍 Scanning source code for security issues with Bandit..."
         
         # Scan any Python files in the repository
         if find . -name "*.py" -not -path "./.git/*" | head -1 | grep -q .; then
           if command -v bandit >/dev/null 2>&1; then
+            echo "Running bandit scan..."
             bandit -r . -f json -o bandit_report.json 2>/dev/null || {
               echo "Bandit scan completed with warnings"
               cat bandit_report.json 2>/dev/null || echo "No JSON report generated"
             }
+            echo "Bandit scan completed."
           else
-            echo "Bandit tool not available"
+            echo "⚠️ Bandit tool not available"
           fi
         else
-          echo "No Python files found to scan with Bandit"
+          echo "ℹ️ No Python files found to scan with Bandit"
         fi
 
     - name: Source code analysis with Semgrep
+      shell: bash
+      timeout-minutes: 15
       run: |
         echo "🔍 Running Semgrep security analysis..."
         
         # Run semgrep with security rules
         if command -v semgrep >/dev/null 2>&1; then
+          echo "Running semgrep scan..."
           semgrep --config=auto --json --output semgrep_report.json . 2>/dev/null || {
             echo "Semgrep scan completed with warnings"
             cat semgrep_report.json 2>/dev/null | head -20 || echo "No JSON report generated"
           }
+          echo "Semgrep scan completed."
         else
-          echo "Semgrep tool not available"
+          echo "⚠️ Semgrep tool not available"
         fi
 
     - name: C++ specific security checks
+      shell: bash
+      timeout-minutes: 5
       run: |
         echo "🔍 Running C++ specific security checks..."
         
@@ -263,6 +310,7 @@ jobs:
         fi
 
     - name: Qt6 security assessment
+      shell: bash
       run: |
         echo "🔍 Checking Qt6 security..."
         
@@ -276,6 +324,7 @@ jobs:
         echo "  Manual verification recommended at: https://www.qt.io/product/qt6/security"
 
     - name: GitHub Security Advisory check
+      shell: bash
       run: |
         echo "🔍 Checking GitHub Security Advisories..."
         
@@ -306,6 +355,7 @@ jobs:
 
     - name: Create vulnerability report
       id: scan-summary
+      shell: bash
       run: |
         echo "📋 Creating vulnerability scan summary..."
         
