@@ -59,13 +59,13 @@
 
 #include <libevdev/libevdev.h>
 
-#include "args.hpp"                    // Command-line argument parsing
-#include "ble_hid_service_manager.hpp" // BLE HID service management with universal support
-#include "device_manager.hpp"          // Device enumeration and hot-plug support
-#include "exit_hotkey_detector.hpp"    // Exit hotkey detection
-#include "hid_keycodes.hpp"            // HID keyboard mappings and state management
-#include "logger.hpp"                  // Logging utilities
-#include "version.hpp"                 // Version information
+#include "args.hpp"                     // Command-line argument parsing
+#include "ble_hid_service_manager.hpp"  // BLE HID service management with universal support
+#include "device_manager.hpp"           // Device enumeration and hot-plug support
+#include "exit_hotkey_detector.hpp"     // Exit hotkey detection
+#include "hid_keycodes.hpp"             // HID keyboard mappings and state management
+#include "logger.hpp"                   // Logging utilities
+#include "version.hpp"                  // Version information
 
 //! @namespace Global application state and configuration
 namespace {
@@ -214,7 +214,7 @@ int main(int argc, char* argv[]) {
     ble_hid::HIDServiceManager hid_manager;
     std::function<void(const std::array<uint8_t, 8>&)> sendKeyboardReport;
     std::function<void(const std::array<uint8_t, 2>&)> sendConsumerReport;
-    
+
     // Declare keyboard manager but don't initialize yet
     std::unique_ptr<device::KeyboardManager> keyboard_manager;
     std::unique_ptr<hid::KeyboardState> kb_state;
@@ -432,10 +432,10 @@ int main(int argc, char* argv[]) {
             if (g_options.verbose) {
                 LOG_DEBUG("Service discovery finished");
             }
-            
+
             // Look for HID service first, then fallback to any writable service
             QLowEnergyService* hid_service = nullptr;
-            
+
             for (const QBluetoothUuid& uuid : controller->services()) {
                 if (ble_hid::is_hid_service(uuid)) {
                     hid_service = controller->createServiceObject(uuid);
@@ -445,8 +445,9 @@ int main(int argc, char* argv[]) {
                     }
                 }
             }
-            
-            // If no HID service found, try to use first available service with writable characteristics
+
+            // If no HID service found, try to use first available service with writable
+            // characteristics
             if (!hid_service) {
                 LOG_WARN("No standard HID service found, trying first available service");
                 for (const QBluetoothUuid& uuid : controller->services()) {
@@ -457,7 +458,7 @@ int main(int argc, char* argv[]) {
                     }
                 }
             }
-            
+
             if (!hid_service) {
                 LOG_ERROR("No usable BLE service found");
                 app.quit();
@@ -469,14 +470,14 @@ int main(int argc, char* argv[]) {
                 [&](QLowEnergyService::ServiceState s) {
                     if (s != QLowEnergyService::RemoteServiceDiscovered)
                         return;
-                    
+
                     // Initialize HID service manager
                     if (!hid_manager.initialize(hid_service)) {
                         LOG_ERROR("Failed to initialize HID service manager");
                         app.quit();
                         return;
                     }
-                    
+
                     // Now initialize keyboard management after BLE connection
                     LOG_INFO("Initializing keyboard monitoring...");
                     keyboard_manager = std::make_unique<device::KeyboardManager>();
@@ -485,32 +486,34 @@ int main(int argc, char* argv[]) {
                         app.quit();
                         return;
                     }
-                    
+
                     kb_state = std::make_unique<hid::KeyboardState>();
-                    
-                    LOG_INFO("Found " + std::to_string(keyboard_manager->device_count()) + " keyboard(s)");
+
+                    LOG_INFO("Found " + std::to_string(keyboard_manager->device_count()) +
+                             " keyboard(s)");
                     if (g_options.verbose) {
                         LOG_DEBUG("Monitoring keyboards (hot-plug supported)...");
                     }
-                    
+
                     // Set up report writers
                     sendKeyboardReport = [&](const std::array<uint8_t, 8>& report) {
                         hid_manager.send_keyboard_report(report);
                     };
-                    
+
                     sendConsumerReport = [&](const std::array<uint8_t, 2>& report) {
                         hid_manager.send_consumer_control_report(report);
                     };
-                    
+
                     LOG_INFO("✔ HID Service Manager initialized successfully");
                     LOG_INFO("Ready! Start typing – Alt+Ctrl+H to quit (Ctrl+C disabled).");
-                    
+
                     // Log available report types
                     auto available_types = hid_manager.get_available_report_types();
                     for (auto report_type : available_types) {
-                        LOG_DEBUG("Available: " + std::string(ble_hid::report_type_to_string(report_type)));
+                        LOG_DEBUG("Available: " +
+                                  std::string(ble_hid::report_type_to_string(report_type)));
                     }
-                    
+
                     // Start input processing loop only after successful connection
                     QTimer* pollTimer = new QTimer();
                     pollTimer->setInterval(g_options.poll_interval);
@@ -545,19 +548,22 @@ int main(int argc, char* argv[]) {
                                 continue;
 
                             input_event ev{};
-                            while (libevdev_next_event(keyboards[i].evdev(), LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0) {
+                            while (libevdev_next_event(keyboards[i].evdev(),
+                                                       LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0) {
                                 if (ev.type != EV_KEY)
                                     continue;
 
                                 if (g_options.verbose) {
-                                    LOG_DEBUG("Key event: code=" + std::to_string(ev.code) + " value=" +
-                                              std::to_string(ev.value) + " from " + keyboards[i].name());
+                                    LOG_DEBUG("Key event: code=" + std::to_string(ev.code) +
+                                              " value=" + std::to_string(ev.value) + " from " +
+                                              keyboards[i].name());
                                 }
 
                                 // Check for exit hotkey (Alt+Ctrl+H)
                                 static ExitHotkeyDetector hotkey_detector(true);  // Enable logging
                                 if (hotkey_detector.process_key_event(ev.code, ev.value)) {
-                                    LOG_INFO("Exit hotkey detected (Alt+Ctrl+H) - stopping program...");
+                                    LOG_INFO(
+                                        "Exit hotkey detected (Alt+Ctrl+H) - stopping program...");
                                     // Send empty reports to release all keys before exit
                                     if (hid_manager.is_ready()) {
                                         hid_manager.send_keyboard_report({0, 0, 0, 0, 0, 0, 0, 0});
@@ -573,40 +579,49 @@ int main(int argc, char* argv[]) {
                                 }
 
                                 if (g_options.verbose) {
-                                    LOG_DEBUG("Hotkey state: " + hotkey_detector.get_state_description());
+                                    LOG_DEBUG("Hotkey state: " +
+                                              hotkey_detector.get_state_description());
                                 }
 
                                 switch (ev.value) {
                                     case 1:  // key down
                                     case 2:  // auto-repeat
                                         // Check if it's a consumer control key first
-                                        if (auto consumer_usage = hid::get_consumer_usage(ev.code)) {
+                                        if (auto consumer_usage =
+                                                hid::get_consumer_usage(ev.code)) {
                                             // Handle consumer control keys (media keys)
-                                            auto consumer_report = hid::make_consumer_report(ev.code, ev.value);
-                                            if (hid_manager.supports_report_type(ble_hid::HIDReportType::CONSUMER_CONTROL)) {
-                                                hid_manager.send_consumer_control_report(consumer_report);
+                                            auto consumer_report =
+                                                hid::make_consumer_report(ev.code, ev.value);
+                                            if (hid_manager.supports_report_type(
+                                                    ble_hid::HIDReportType::CONSUMER_CONTROL)) {
+                                                hid_manager.send_consumer_control_report(
+                                                    consumer_report);
                                                 if (g_options.verbose) {
-                                                    LOG_DEBUG("Sent Consumer Control report: [" + 
-                                                              std::to_string(consumer_report[0]) + ", " +
-                                                              std::to_string(consumer_report[1]) + "]");
+                                                    LOG_DEBUG(
+                                                        "Sent Consumer Control report: [" +
+                                                        std::to_string(consumer_report[0]) + ", " +
+                                                        std::to_string(consumer_report[1]) + "]");
                                                 }
                                             } else {
-                                                LOG_DEBUG("Consumer control not supported, skipping media key");
+                                                LOG_DEBUG("Consumer control not supported, "
+                                                          "skipping media key");
                                             }
-                                        } else if (hid::apply_key_event(*kb_state, ev.code, ev.value)) {
+                                        } else if (hid::apply_key_event(*kb_state, ev.code,
+                                                                        ev.value)) {
                                             // Handle regular keyboard keys
                                             auto report = kb_state->get_report();
-                                            if (hid_manager.supports_report_type(ble_hid::HIDReportType::KEYBOARD_INPUT)) {
+                                            if (hid_manager.supports_report_type(
+                                                    ble_hid::HIDReportType::KEYBOARD_INPUT)) {
                                                 hid_manager.send_keyboard_report(report);
                                                 if (g_options.verbose) {
-                                                    LOG_DEBUG("Sent Keyboard report: [" + 
+                                                    LOG_DEBUG("Sent Keyboard report: [" +
                                                               std::to_string(report[0]) + ", " +
-                                                              std::to_string(report[1]) + ", " + 
+                                                              std::to_string(report[1]) + ", " +
                                                               std::to_string(report[2]) + ", " +
                                                               std::to_string(report[3]) + ", " +
-                                                              std::to_string(report[4]) + ", " + 
+                                                              std::to_string(report[4]) + ", " +
                                                               std::to_string(report[5]) + ", " +
-                                                              std::to_string(report[6]) + ", " + 
+                                                              std::to_string(report[6]) + ", " +
                                                               std::to_string(report[7]) + "]");
                                                 }
                                             } else {
@@ -616,29 +631,34 @@ int main(int argc, char* argv[]) {
                                         break;
                                     case 0:  // key release
                                         // Handle key release for consumer control keys
-                                        if (auto consumer_usage = hid::get_consumer_usage(ev.code)) {
+                                        if (auto consumer_usage =
+                                                hid::get_consumer_usage(ev.code)) {
                                             // Send consumer control release (all zeros)
-                                            if (hid_manager.supports_report_type(ble_hid::HIDReportType::CONSUMER_CONTROL)) {
+                                            if (hid_manager.supports_report_type(
+                                                    ble_hid::HIDReportType::CONSUMER_CONTROL)) {
                                                 hid_manager.send_consumer_control_report({0, 0});
                                                 if (g_options.verbose) {
-                                                    LOG_DEBUG("Sent Consumer Control release: [0, 0]");
+                                                    LOG_DEBUG(
+                                                        "Sent Consumer Control release: [0, 0]");
                                                 }
                                             }
                                         } else {
                                             // Handle regular keyboard key release
-                                            [[maybe_unused]] bool changed = hid::apply_key_event(*kb_state, ev.code, ev.value);
-                                            if (hid_manager.supports_report_type(ble_hid::HIDReportType::KEYBOARD_INPUT)) {
+                                            [[maybe_unused]] bool changed =
+                                                hid::apply_key_event(*kb_state, ev.code, ev.value);
+                                            if (hid_manager.supports_report_type(
+                                                    ble_hid::HIDReportType::KEYBOARD_INPUT)) {
                                                 auto report = kb_state->get_report();
                                                 hid_manager.send_keyboard_report(report);
                                                 if (g_options.verbose) {
-                                                    LOG_DEBUG("Sent Keyboard release report: [" + 
+                                                    LOG_DEBUG("Sent Keyboard release report: [" +
                                                               std::to_string(report[0]) + ", " +
-                                                              std::to_string(report[1]) + ", " + 
+                                                              std::to_string(report[1]) + ", " +
                                                               std::to_string(report[2]) + ", " +
                                                               std::to_string(report[3]) + ", " +
-                                                              std::to_string(report[4]) + ", " + 
+                                                              std::to_string(report[4]) + ", " +
                                                               std::to_string(report[5]) + ", " +
-                                                              std::to_string(report[6]) + ", " + 
+                                                              std::to_string(report[6]) + ", " +
                                                               std::to_string(report[7]) + "]");
                                                 }
                                             }

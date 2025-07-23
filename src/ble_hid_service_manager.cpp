@@ -7,9 +7,11 @@
  */
 
 #include "ble_hid_service_manager.hpp"
-#include "logger.hpp"
+
 #include <QBluetoothUuid>
 #include <QLowEnergyDescriptor>
+
+#include "logger.hpp"
 
 namespace ble_hid {
 
@@ -25,22 +27,22 @@ bool HIDServiceManager::initialize(QLowEnergyService* service) {
 
     // Verify this is actually a HID service
     if (!is_hid_service(service->serviceUuid())) {
-        LOG_WARN("Service is not a standard HID service: " + 
+        LOG_WARN("Service is not a standard HID service: " +
                  service->serviceUuid().toString().toStdString());
     }
 
     hid_service_ = service;
-    
+
     // Discover and map characteristics
     discover_characteristics(service);
-    
+
     // Check if we have at least one usable characteristic
     service_ready_ = !characteristic_map_.empty();
-    
+
     if (service_ready_) {
-        LOG_INFO("HID Service Manager initialized successfully with " + 
+        LOG_INFO("HID Service Manager initialized successfully with " +
                  std::to_string(characteristic_map_.size()) + " characteristic(s)");
-        
+
         // Log available report types
         for (const auto& [report_type, mapping] : characteristic_map_) {
             LOG_DEBUG("Available report type: " + std::string(report_type_to_string(report_type)) +
@@ -49,7 +51,7 @@ bool HIDServiceManager::initialize(QLowEnergyService* service) {
     } else {
         LOG_ERROR("No usable HID characteristics found in service");
     }
-    
+
     return service_ready_;
 }
 
@@ -67,7 +69,7 @@ bool HIDServiceManager::send_keyboard_report(const std::array<std::uint8_t, 8>& 
 
     // Create QByteArray from report data
     QByteArray data(reinterpret_cast<const char*>(report.data()), report.size());
-    
+
     // Add report ID if characteristic expects it
     if (it->second.report_id != 0) {
         data.prepend(static_cast<char>(it->second.report_id));
@@ -92,7 +94,7 @@ bool HIDServiceManager::send_consumer_control_report(const std::array<std::uint8
 
     // Create QByteArray from report data
     QByteArray data(reinterpret_cast<const char*>(report.data()), report.size());
-    
+
     // Add report ID if characteristic expects it
     if (it->second.report_id != 0) {
         data.prepend(static_cast<char>(it->second.report_id));
@@ -111,13 +113,13 @@ bool HIDServiceManager::send_report(HIDReportType report_type, const QByteArray&
 
     auto it = characteristic_map_.find(report_type);
     if (it == characteristic_map_.end()) {
-        LOG_WARN("No characteristic available for report type: " + 
+        LOG_WARN("No characteristic available for report type: " +
                  std::string(report_type_to_string(report_type)));
         return false;
     }
 
     QByteArray formatted_data = data;
-    
+
     // Add report ID if characteristic expects it
     if (it->second.report_id != 0) {
         formatted_data.prepend(static_cast<char>(it->second.report_id));
@@ -128,7 +130,7 @@ bool HIDServiceManager::send_report(HIDReportType report_type, const QByteArray&
     return true;
 }
 
-std::optional<HIDServiceManager::CharacteristicMapping> 
+std::optional<HIDServiceManager::CharacteristicMapping>
 HIDServiceManager::get_characteristic_mapping(HIDReportType report_type) const {
     auto it = characteristic_map_.find(report_type);
     if (it != characteristic_map_.end()) {
@@ -140,11 +142,11 @@ HIDServiceManager::get_characteristic_mapping(HIDReportType report_type) const {
 std::vector<HIDReportType> HIDServiceManager::get_available_report_types() const {
     std::vector<HIDReportType> types;
     types.reserve(characteristic_map_.size());
-    
+
     for (const auto& [report_type, mapping] : characteristic_map_) {
         types.push_back(report_type);
     }
-    
+
     return types;
 }
 
@@ -154,15 +156,15 @@ bool HIDServiceManager::supports_report_type(HIDReportType report_type) const {
 
 void HIDServiceManager::discover_characteristics(QLowEnergyService* service) {
     characteristic_map_.clear();
-    
+
     LOG_DEBUG("Discovering HID characteristics...");
-    
+
     for (const auto& characteristic : service->characteristics()) {
         LOG_DEBUG("Analyzing characteristic: " + characteristic.uuid().toString().toStdString());
-        
+
         // Check if characteristic supports writing
-        if (!(characteristic.properties() & (QLowEnergyCharacteristic::Write | 
-                                           QLowEnergyCharacteristic::WriteNoResponse))) {
+        if (!(characteristic.properties() &
+              (QLowEnergyCharacteristic::Write | QLowEnergyCharacteristic::WriteNoResponse))) {
             LOG_DEBUG("Characteristic doesn't support writing, skipping");
             continue;
         }
@@ -176,7 +178,7 @@ void HIDServiceManager::discover_characteristics(QLowEnergyService* service) {
 
         // Validate characteristic for the identified report type
         if (!validate_characteristic(characteristic, *report_type)) {
-            LOG_DEBUG("Characteristic validation failed for report type: " + 
+            LOG_DEBUG("Characteristic validation failed for report type: " +
                       std::string(report_type_to_string(*report_type)));
             continue;
         }
@@ -205,51 +207,49 @@ void HIDServiceManager::discover_characteristics(QLowEnergyService* service) {
         }
 
         characteristic_map_[*report_type] = std::move(mapping);
-        
+
         LOG_INFO("Mapped characteristic for " + std::string(report_type_to_string(*report_type)) +
                  " [UUID: " + characteristic.uuid().toString().toStdString() + "]");
     }
 }
 
-HIDServiceManager::ReportWriter HIDServiceManager::create_report_writer(
-    QLowEnergyService* service,
-    QLowEnergyCharacteristic characteristic,
-    HIDReportType report_type) {
-    
+HIDServiceManager::ReportWriter
+HIDServiceManager::create_report_writer(QLowEnergyService* service,
+                                        QLowEnergyCharacteristic characteristic,
+                                        HIDReportType report_type) {
     return [service, characteristic, report_type](const QByteArray& data) {
         if (!service || !characteristic.isValid()) {
-            LOG_WARN("Invalid service or characteristic, skipping " + 
+            LOG_WARN("Invalid service or characteristic, skipping " +
                      std::string(report_type_to_string(report_type)) + " report");
             return;
         }
 
         // Use WriteWithoutResponse for better performance
         service->writeCharacteristic(characteristic, data, QLowEnergyService::WriteWithoutResponse);
-        
-        LOG_DEBUG("Sent " + std::string(report_type_to_string(report_type)) + 
-                  " report (" + std::to_string(data.size()) + " bytes)");
+
+        LOG_DEBUG("Sent " + std::string(report_type_to_string(report_type)) + " report (" +
+                  std::to_string(data.size()) + " bytes)");
     };
 }
 
-std::optional<HIDReportType> HIDServiceManager::identify_report_type(
-    const QLowEnergyCharacteristic& characteristic) {
-    
+std::optional<HIDReportType>
+HIDServiceManager::identify_report_type(const QLowEnergyCharacteristic& characteristic) {
     QString uuid = characteristic.uuid().toString().toUpper();
-    
+
     // Check for boot keyboard input report
     if (uuid.contains("2A22")) {
         return HIDReportType::KEYBOARD_INPUT;
     }
-    
+
     // Check for standard report characteristic
     if (uuid.contains("2A4D")) {
         // For generic report characteristics, we need to check descriptors
         // or use heuristics based on the service context
-        
+
         // Check if there are descriptors that might indicate report type
         for (const auto& descriptor : characteristic.descriptors()) {
             QString desc_uuid = descriptor.uuid().toString().toUpper();
-            
+
             // Check for Report Reference descriptor (0x2908)
             if (desc_uuid.contains("2908")) {
                 // Would need to read descriptor value to determine report type
@@ -257,7 +257,7 @@ std::optional<HIDReportType> HIDServiceManager::identify_report_type(
                 break;
             }
         }
-        
+
         // Use characteristic name or other heuristics if available
         QString name = characteristic.name().toUpper();
         if (name.contains("KEYBOARD") || name.contains("KEY")) {
@@ -266,24 +266,24 @@ std::optional<HIDReportType> HIDServiceManager::identify_report_type(
         if (name.contains("CONSUMER") || name.contains("MEDIA")) {
             return HIDReportType::CONSUMER_CONTROL;
         }
-        
+
         // Default to keyboard input for first generic characteristic
         return HIDReportType::KEYBOARD_INPUT;
     }
-    
+
     // Look for any characteristic that might be writable and HID-related
     // This is a fallback for non-standard implementations
-    if (characteristic.properties() & (QLowEnergyCharacteristic::Write | 
-                                     QLowEnergyCharacteristic::WriteNoResponse)) {
+    if (characteristic.properties() &
+        (QLowEnergyCharacteristic::Write | QLowEnergyCharacteristic::WriteNoResponse)) {
         // Assume keyboard input as the most common use case
         return HIDReportType::KEYBOARD_INPUT;
     }
-    
+
     return std::nullopt;
 }
 
 bool HIDServiceManager::validate_characteristic(const QLowEnergyCharacteristic& characteristic,
-                                               HIDReportType report_type) {
+                                                HIDReportType report_type) {
     // Check if characteristic is valid
     if (!characteristic.isValid()) {
         return false;
@@ -291,8 +291,8 @@ bool HIDServiceManager::validate_characteristic(const QLowEnergyCharacteristic& 
 
     // Check if characteristic supports required properties
     auto properties = characteristic.properties();
-    if (!(properties & (QLowEnergyCharacteristic::Write | 
-                       QLowEnergyCharacteristic::WriteNoResponse))) {
+    if (!(properties &
+          (QLowEnergyCharacteristic::Write | QLowEnergyCharacteristic::WriteNoResponse))) {
         return false;
     }
 
@@ -333,7 +333,7 @@ const char* report_type_to_string(HIDReportType report_type) {
 
 bool is_hid_service(const QBluetoothUuid& service_uuid) {
     QString uuid_str = service_uuid.toString().toUpper();
-    
+
     // Check for standard HID service UUID (0x1812)
     return uuid_str.contains("1812") || uuid_str.contains(QString(HID_SERVICE_UUID).toUpper());
 }
@@ -341,13 +341,13 @@ bool is_hid_service(const QBluetoothUuid& service_uuid) {
 QByteArray create_formatted_report(std::uint8_t report_id, const QByteArray& data) {
     QByteArray formatted;
     formatted.reserve(data.size() + 1);
-    
+
     if (report_id != 0) {
         formatted.append(static_cast<char>(report_id));
     }
     formatted.append(data);
-    
+
     return formatted;
 }
 
-} // namespace ble_hid
+}  // namespace ble_hid

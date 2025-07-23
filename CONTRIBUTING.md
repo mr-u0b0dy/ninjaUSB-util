@@ -70,9 +70,38 @@ sudo apt update && sudo apt install -y \
 
 # Install Node.js tools for documentation quality
 npm install -g markdownlint-cli2 @mermaid-js/mermaid-cli markdown-link-check
+```
 
-# Individual quality checks (CI will run comprehensive checks)
+### Code Formatting
+
+We use `clang-format` to maintain consistent code style. A formatting script is provided for convenience:
+
+```bash
+# Check code formatting (what CI will do)
+./scripts/format-code.sh --check
+
+# Apply formatting to all C++ files
+./scripts/format-code.sh
+
+# Manual formatting commands
+find src tests -name "*.cpp" -o -name "*.hpp" | xargs clang-format -i
 clang-format --dry-run --Werror src/*.cpp src/inc/*.hpp
+```
+
+**Optional Pre-commit Hook**: To automatically check formatting before commits:
+
+```bash
+cp scripts/pre-commit-hook.sh .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+### Individual Quality Checks
+
+```bash
+# Code formatting check (CI will run comprehensive checks)
+./scripts/format-code.sh --check
+
+# Documentation linting
 markdownlint-cli2 *.md doc/*.md
 
 # Memory check

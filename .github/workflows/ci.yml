@@ -106,7 +106,7 @@ jobs:
             tools: "nodejs npm yamllint"
           - check-type: cpp-analysis
             name: "C++ Analysis"
-            tools: "clang-format cppcheck clang-tidy build-essential cmake pkg-config libudev-dev libevdev-dev qt6-base-dev qt6-connectivity-dev"
+            tools: "clang-format-18 cppcheck clang-tidy build-essential cmake pkg-config libudev-dev libevdev-dev qt6-base-dev qt6-connectivity-dev diffutils"
           - check-type: file-validation
             name: "File Validation"
             tools: "file jq"
@@ -120,11 +120,30 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update -qq
+        # Install dependencies with fallbacks for clang-format
         apt-get install -y \
           git \
           curl \
           ca-certificates \
-          ${{ matrix.tools }}
+          diffutils
+          
+        # Install main tools
+        if echo "${{ matrix.tools }}" | grep -q "clang-format"; then
+          # Try to install clang-format-18 first, then fallback to default
+          apt-get install -y clang-format-18 || apt-get install -y clang-format
+          # Create clang-format symlink if needed
+          if command -v clang-format-18 >/dev/null 2>&1 && ! command -v clang-format >/dev/null 2>&1; then
+            ln -sf /usr/bin/clang-format-18 /usr/bin/clang-format
+          fi
+          
+          # Install other tools, excluding clang-format from the list
+          OTHER_TOOLS=$(echo "${{ matrix.tools }}" | sed 's/clang-format[^[:space:]]*//' | sed 's/clang-format//')
+          if [ -n "$OTHER_TOOLS" ]; then
+            apt-get install -y $OTHER_TOOLS
+          fi
+        else
+          apt-get install -y ${{ matrix.tools }}
+        fi
 
     - name: Checkout code
       uses: actions/checkout@v4
@@ -462,15 +481,40 @@ jobs:
       if: matrix.check-type == 'cpp-analysis'
       run: |
         echo "🔍 Checking C++ code formatting with clang-format..."
+        
+        # Check clang-format version and availability
+        if ! command -v clang-format >/dev/null 2>&1; then
+          echo "❌ clang-format not found, installing..."
+          apt-get update -qq && apt-get install -y clang-format-18 || apt-get install -y clang-format
+        fi
+        
+        CLANG_FORMAT_VERSION=$(clang-format --version | head -1)
+        echo "Using: $CLANG_FORMAT_VERSION"
+        
+        # Check if .clang-format file exists
+        if [ ! -f .clang-format ]; then
+          echo "❌ .clang-format configuration file not found"
+          exit 1
+        fi
+        
         if find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null | grep -q .; then
           FORMAT_ISSUES=0
+          echo "Found C++ files to check:"
+          find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null | head -10
+          
           for file in $(find src tests -name "*.cpp" -o -name "*.hpp" 2>/dev/null); do
+            echo "Checking $file..."
             if ! clang-format --dry-run --Werror "$file" >/dev/null 2>&1; then
               echo "❌ Formatting issues in: $file"
               FORMAT_ISSUES=1
-              # Show the diff
+              # Show the diff with better error handling
               echo "Expected formatting for $file:"
-              clang-format "$file" | diff "$file" - || true
+              if command -v diff >/dev/null 2>&1; then
+                clang-format "$file" | diff -u "$file" - || true
+              else
+                echo "Diff not available, showing expected format:"
+                clang-format "$file" | head -20
+              fi
             else
               echo "✅ Properly formatted: $file"
             fi
@@ -478,7 +522,8 @@ jobs:
           
           if [ $FORMAT_ISSUES -eq 1 ]; then
             echo "❌ C++ formatting validation failed"
-            echo "💡 Run 'find src tests -name \"*.cpp\" -o -name \"*.hpp\" | xargs clang-format -i' to fix formatting"
+            echo "💡 Fix formatting with: find src tests -name \"*.cpp\" -o -name \"*.hpp\" | xargs clang-format -i"
+            echo "💡 Verify with: find src tests -name \"*.cpp\" -o -name \"*.hpp\" | xargs clang-format --dry-run --Werror"
             exit 1
           else
             echo "✅ All C++ files properly formatted"

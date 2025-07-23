@@ -12,14 +12,14 @@
 
 #pragma once
 
-#include <QBluetoothUuid>
-#include <QLowEnergyCharacteristic>
-#include <QLowEnergyService>
-#include <QByteArray>
 #include <array>
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <QBluetoothUuid>
+#include <QByteArray>
+#include <QLowEnergyCharacteristic>
+#include <QLowEnergyService>
 #include <unordered_map>
 
 /**
@@ -75,11 +75,11 @@ constexpr const char* BOOT_KEYBOARD_OUTPUT_REPORT_UUID = "00002a32-0000-1000-800
  * @brief HID Report Types according to HID specification
  */
 enum class HIDReportType : std::uint8_t {
-    KEYBOARD_INPUT = 0x01,      //!< Standard keyboard input report
-    CONSUMER_CONTROL = 0x02,    //!< Consumer control (media keys) input report
-    MOUSE_INPUT = 0x03,         //!< Mouse input report (future extension)
-    KEYBOARD_OUTPUT = 0x11,     //!< Keyboard output report (LED status)
-    FEATURE = 0x21              //!< Feature report
+    KEYBOARD_INPUT = 0x01,    //!< Standard keyboard input report
+    CONSUMER_CONTROL = 0x02,  //!< Consumer control (media keys) input report
+    MOUSE_INPUT = 0x03,       //!< Mouse input report (future extension)
+    KEYBOARD_OUTPUT = 0x11,   //!< Keyboard output report (LED status)
+    FEATURE = 0x21            //!< Feature report
 };
 
 /**
@@ -93,13 +93,11 @@ struct HIDReportDescriptor {
 };
 
 // Standard HID report descriptors
-constexpr HIDReportDescriptor KEYBOARD_REPORT_DESC = {
-    0x01, HIDReportType::KEYBOARD_INPUT, 8, "Keyboard Input Report"
-};
+constexpr HIDReportDescriptor KEYBOARD_REPORT_DESC = {0x01, HIDReportType::KEYBOARD_INPUT, 8,
+                                                      "Keyboard Input Report"};
 
-constexpr HIDReportDescriptor CONSUMER_CONTROL_REPORT_DESC = {
-    0x02, HIDReportType::CONSUMER_CONTROL, 2, "Consumer Control Input Report"
-};
+constexpr HIDReportDescriptor CONSUMER_CONTROL_REPORT_DESC = {0x02, HIDReportType::CONSUMER_CONTROL,
+                                                              2, "Consumer Control Input Report"};
 
 // ---------------------------------------------------------------------------
 //  HID Service Manager Class
@@ -113,7 +111,7 @@ constexpr HIDReportDescriptor CONSUMER_CONTROL_REPORT_DESC = {
  * characteristics based on HID usage and report type.
  */
 class HIDServiceManager {
-public:
+  public:
     /**
      * @brief Function type for sending HID reports to characteristics
      */
@@ -131,12 +129,12 @@ public:
         bool is_valid;
     };
 
-private:
+  private:
     std::unordered_map<HIDReportType, CharacteristicMapping> characteristic_map_;
     QLowEnergyService* hid_service_ = nullptr;
     bool service_ready_ = false;
 
-public:
+  public:
     /**
      * @brief Constructor
      */
@@ -191,7 +189,8 @@ public:
      * @param report_type HID report type
      * @return Optional characteristic mapping
      */
-    std::optional<CharacteristicMapping> get_characteristic_mapping(HIDReportType report_type) const;
+    std::optional<CharacteristicMapping>
+    get_characteristic_mapping(HIDReportType report_type) const;
 
     /**
      * @brief Get list of available report types
@@ -206,7 +205,7 @@ public:
      */
     bool supports_report_type(HIDReportType report_type) const;
 
-private:
+  private:
     /**
      * @brief Discover and map HID characteristics
      * @param service HID service to analyze
@@ -221,15 +220,16 @@ private:
      * @return Report writer function
      */
     ReportWriter create_report_writer(QLowEnergyService* service,
-                                     QLowEnergyCharacteristic characteristic,
-                                     HIDReportType report_type);
+                                      QLowEnergyCharacteristic characteristic,
+                                      HIDReportType report_type);
 
     /**
      * @brief Identify HID report type from characteristic
      * @param characteristic BLE characteristic to analyze
      * @return Optional HID report type
      */
-    std::optional<HIDReportType> identify_report_type(const QLowEnergyCharacteristic& characteristic);
+    std::optional<HIDReportType>
+    identify_report_type(const QLowEnergyCharacteristic& characteristic);
 
     /**
      * @brief Validate HID characteristic for specific report type
@@ -238,7 +238,7 @@ private:
      * @return true if valid, false otherwise
      */
     bool validate_characteristic(const QLowEnergyCharacteristic& characteristic,
-                                HIDReportType report_type);
+                                 HIDReportType report_type);
 };
 
 // ---------------------------------------------------------------------------
@@ -267,4 +267,4 @@ bool is_hid_service(const QBluetoothUuid& service_uuid);
  */
 QByteArray create_formatted_report(std::uint8_t report_id, const QByteArray& data);
 
-} // namespace ble_hid
+}  // namespace ble_hid
