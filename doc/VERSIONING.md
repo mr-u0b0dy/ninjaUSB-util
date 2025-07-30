@@ -16,6 +16,7 @@ MAJOR.MINOR.PATCH[-BUILD]
 Examples:
 
 - `1.0.0` - Release version
+- `1.0.0-alpha` - Alpha version
 - `1.0.0-dev` - Development version
 - `1.2.3-beta` - Beta version
 - `2.0.0-rc1` - Release candidate
@@ -93,7 +94,8 @@ The version system is used in:
 ## Development Workflow
 
 - Use `-dev` suffix during development: `1.0.0-dev`
-- Use `-beta`, `-rc1` etc. for pre-releases
+- Use `-alpha` for early pre-releases: `1.0.0-alpha`
+- Use `-beta`, `-rc1` etc. for later pre-releases
 - Use clean version for releases: `1.0.0`
 
 This centralized approach ensures version consistency across the entire codebase

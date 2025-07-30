@@ -23,8 +23,6 @@ A Linux utility that bridges USB keyboard input to Bluetooth Low Energy (BLE) de
   version, and configuration options
 - **Verbose Logging**: Detailed logging with configurable levels for debugging and
   monitoring
-- **Comprehensive Testing**: Extensive unit test suite covering all core functionality
-  with 100% test pass rate and excellent code coverage
 - **Automatic Versioning**: Centralized version management with build information
 
 ## Quick Start
@@ -37,9 +35,6 @@ sudo apt install cmake qt6-base-dev qt6-connectivity-dev libudev-dev libevdev-de
 mkdir build && cd build
 cmake ..
 make
-
-# Optionally run tests
-cmake .. -DBUILD_TESTS=ON && make && ctest
 
 # Run (requires sudo for keyboard access)
 sudo ./ninja_util
@@ -71,7 +66,6 @@ By default, if exactly one NinjaUSB device is found during scanning, the utility
 - **[Contributing](CONTRIBUTING.md)** - Quick start for contributors
 - **[Development](doc/DEVELOPMENT.md)** - Detailed development guide
 - **[Architecture](doc/ARCHITECTURE.md)** - System architecture and design
-- **[Testing](doc/TESTING.md)** - Testing procedures
 - **[Versioning](doc/VERSIONING.md)** - Version management
 
 ### Developer Resources
@@ -111,26 +105,3 @@ flowchart LR
 ## License
 
 Licensed under the Apache License 2.0 - see [LICENSE](LICENSE) file.
-
-## 🧪 Testing
-
-The project includes comprehensive unit tests with 100% pass rate:
-
-```bash
-# Build and run tests
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build
-cd build && ctest --output-on-failure
-```
-
-**Test Coverage:**
-
-- ✅ Device management and hot-plug detection
-- ✅ Command-line argument parsing (fixed v1.1.1)
-- ✅ HID keyboard mappings and state management
-- ✅ Logging system with multiple levels
-- ✅ Exit hotkey detection (Alt+Ctrl+H)
-- ✅ Signal handling for graceful shutdown
-- ✅ BLE report writer functionality
-
-For detailed testing procedures, see [doc/TESTING.md](doc/TESTING.md).

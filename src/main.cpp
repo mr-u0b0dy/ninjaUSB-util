@@ -44,6 +44,7 @@
 #include <csignal>
 #include <functional>  // Add missing functional header
 #include <iostream>
+#include <memory>  // Add for std::unique_ptr
 #include <poll.h>
 #include <QBluetoothDeviceDiscoveryAgent>
 #include <QBluetoothDeviceInfo>
@@ -58,12 +59,13 @@
 
 #include <libevdev/libevdev.h>
 
-#include "args.hpp"                  // Command-line argument parsing
-#include "device_manager.hpp"        // Device enumeration and hot-plug support
-#include "exit_hotkey_detector.hpp"  // Exit hotkey detection
-#include "hid_keycodes.hpp"          // HID keyboard mappings and state management
-#include "logger.hpp"                // Logging utilities
-#include "version.hpp"               // Version information
+#include "args.hpp"                     // Command-line argument parsing
+#include "ble_hid_service_manager.hpp"  // BLE HID service management with universal support
+#include "device_manager.hpp"           // Device enumeration and hot-plug support
+#include "exit_hotkey_detector.hpp"     // Exit hotkey detection
+#include "hid_keycodes.hpp"             // HID keyboard mappings and state management
+#include "logger.hpp"                   // Logging utilities
+#include "version.hpp"                  // Version information
 
 //! @namespace Global application state and configuration
 namespace {
@@ -104,43 +106,6 @@ void signal_handler(int signum) {
 
     LOG_INFO("Caught signal " + std::to_string(signum) + ", exiting...");
     g_running = false;
-}
-
-// ---------------------------------------------------------------------------
-//  BLE Communication Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * @brief Factory function to create HID report writer for BLE characteristic
- * @param service Pointer to the BLE GATT service
- * @param ch The writable characteristic for HID reports
- * @return Lambda function that writes HID reports to the BLE characteristic
- *
- * This function returns a lambda that captures the service and characteristic
- * for writing HID keyboard reports. The lambda validates the service and
- * characteristic before each write operation.
- *
- * @section HIDReport HID Report Format
- * The function writes 8-byte HID keyboard reports in the standard format:
- * - Byte 0: Modifier keys (Ctrl, Alt, Shift, etc.)
- * - Byte 1: Reserved (always 0)
- * - Bytes 2-7: Up to 6 simultaneous key codes
- *
- * @note Uses WriteWithoutResponse for minimal latency
- * @note The returned lambda is safe to call even if service/characteristic become invalid
- */
-auto make_report_writer(QLowEnergyService* service, QLowEnergyCharacteristic ch) {
-    return [service, ch](const std::array<uint8_t, 8>& report) {
-        // Validate service and characteristic before writing
-        if (!service || !ch.isValid()) {
-            LOG_INFO("Invalid service or characteristic, skipping HID report");
-            return;
-        }
-
-        // Convert HID report to QByteArray and transmit
-        QByteArray data(reinterpret_cast<const char*>(report.data()), 8);
-        service->writeCharacteristic(ch, data, QLowEnergyService::WriteWithoutResponse);
-    };
 }
 
 // ---------------------------------------------------------------------------
@@ -233,20 +198,6 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
-    // ------------------ Initialize device management ------------------
-    device::KeyboardManager keyboard_manager;
-    if (!keyboard_manager.is_valid()) {
-        LOG_ERROR("Failed to initialize device monitoring");
-        return 1;
-    }
-
-    LOG_INFO("Found " + std::to_string(keyboard_manager.device_count()) + " keyboard(s)");
-    if (g_options.verbose) {
-        LOG_DEBUG("Monitoring keyboards (hot-plug supported)...");
-    }
-
-    hid::KeyboardState kb_state;
-
     // ------------------ Qt setup ------------------
     QCoreApplication app(argc, argv);
     QBluetoothDeviceDiscoveryAgent discoveryAgent;
@@ -260,9 +211,13 @@ int main(int argc, char* argv[]) {
 
     QList<QBluetoothDeviceInfo> foundDevices;
     QLowEnergyController* controller = nullptr;
-    QLowEnergyService* service = nullptr;
-    QLowEnergyCharacteristic targetChar;
-    std::function<void(const std::array<uint8_t, 8>&)> sendReport;
+    ble_hid::HIDServiceManager hid_manager;
+    std::function<void(const std::array<uint8_t, 8>&)> sendKeyboardReport;
+    std::function<void(const std::array<uint8_t, 2>&)> sendConsumerReport;
+
+    // Declare keyboard manager but don't initialize yet
+    std::unique_ptr<device::KeyboardManager> keyboard_manager;
+    std::unique_ptr<hid::KeyboardState> kb_state;
 
     // ----- Device discovery -----
     QObject::connect(&discoveryAgent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
@@ -477,37 +432,245 @@ int main(int argc, char* argv[]) {
             if (g_options.verbose) {
                 LOG_DEBUG("Service discovery finished");
             }
-            // Pick first service and search for writable char
-            for (const QBluetoothUuid& uuid : controller->services()) {
-                service = controller->createServiceObject(uuid);
-                if (!service)
-                    continue;
 
-                QObject::connect(
-                    service, &QLowEnergyService::stateChanged,
-                    [&](QLowEnergyService::ServiceState s) {
-                        if (s != QLowEnergyService::RemoteServiceDiscovered)
+            // Look for HID service first, then fallback to any writable service
+            QLowEnergyService* hid_service = nullptr;
+
+            for (const QBluetoothUuid& uuid : controller->services()) {
+                if (ble_hid::is_hid_service(uuid)) {
+                    hid_service = controller->createServiceObject(uuid);
+                    if (hid_service) {
+                        LOG_INFO("Found HID service: " + uuid.toString().toStdString());
+                        break;
+                    }
+                }
+            }
+
+            // If no HID service found, try to use first available service with writable
+            // characteristics
+            if (!hid_service) {
+                LOG_WARN("No standard HID service found, trying first available service");
+                for (const QBluetoothUuid& uuid : controller->services()) {
+                    hid_service = controller->createServiceObject(uuid);
+                    if (hid_service) {
+                        LOG_INFO("Using service: " + uuid.toString().toStdString());
+                        break;
+                    }
+                }
+            }
+
+            if (!hid_service) {
+                LOG_ERROR("No usable BLE service found");
+                app.quit();
+                return;
+            }
+
+            QObject::connect(
+                hid_service, &QLowEnergyService::stateChanged,
+                [&](QLowEnergyService::ServiceState s) {
+                    if (s != QLowEnergyService::RemoteServiceDiscovered)
+                        return;
+
+                    // Initialize HID service manager
+                    if (!hid_manager.initialize(hid_service)) {
+                        LOG_ERROR("Failed to initialize HID service manager");
+                        app.quit();
+                        return;
+                    }
+
+                    // Now initialize keyboard management after BLE connection
+                    LOG_INFO("Initializing keyboard monitoring...");
+                    keyboard_manager = std::make_unique<device::KeyboardManager>();
+                    if (!keyboard_manager->is_valid()) {
+                        LOG_ERROR("Failed to initialize device monitoring");
+                        app.quit();
+                        return;
+                    }
+
+                    kb_state = std::make_unique<hid::KeyboardState>();
+
+                    LOG_INFO("Found " + std::to_string(keyboard_manager->device_count()) +
+                             " keyboard(s)");
+                    if (g_options.verbose) {
+                        LOG_DEBUG("Monitoring keyboards (hot-plug supported)...");
+                    }
+
+                    // Set up report writers
+                    sendKeyboardReport = [&](const std::array<uint8_t, 8>& report) {
+                        hid_manager.send_keyboard_report(report);
+                    };
+
+                    sendConsumerReport = [&](const std::array<uint8_t, 2>& report) {
+                        hid_manager.send_consumer_control_report(report);
+                    };
+
+                    LOG_INFO("✔ HID Service Manager initialized successfully");
+                    LOG_INFO("Ready! Start typing – Alt+Ctrl+H to quit (Ctrl+C disabled).");
+
+                    // Log available report types
+                    auto available_types = hid_manager.get_available_report_types();
+                    for (auto report_type : available_types) {
+                        LOG_DEBUG("Available: " +
+                                  std::string(ble_hid::report_type_to_string(report_type)));
+                    }
+
+                    // Start input processing loop only after successful connection
+                    QTimer* pollTimer = new QTimer();
+                    pollTimer->setInterval(g_options.poll_interval);
+                    QObject::connect(pollTimer, &QTimer::timeout, [&] {
+                        if (!g_running || !hid_manager.is_ready() || !keyboard_manager || !kb_state)
                             return;
-                        for (const auto& c : service->characteristics()) {
-                            if (c.properties() & (QLowEnergyCharacteristic::Write |
-                                                  QLowEnergyCharacteristic::WriteNoResponse)) {
-                                targetChar = c;
-                                sendReport = make_report_writer(service, targetChar);
-                                LOG_INFO("✔ Found writable characteristic: " +
-                                         c.uuid().toString().toStdString());
-                                LOG_INFO(
-                                    "Ready! Start typing – Alt+Ctrl+H to quit (Ctrl+C disabled).");
+
+                        // Update device list (handle hot-plug events)
+                        if (keyboard_manager->update_devices() && g_options.verbose) {
+                            LOG_DEBUG("Device list updated");
+                        }
+
+                        // Get poll file descriptors
+                        std::vector<int> fds = keyboard_manager->get_poll_fds();
+                        if (fds.empty())
+                            return;
+
+                        // Create pollfd structures
+                        std::vector<struct pollfd> pfds;
+                        pfds.reserve(fds.size());
+                        for (int fd : fds) {
+                            pfds.push_back({fd, POLLIN, 0});
+                        }
+
+                        if (poll(pfds.data(), pfds.size(), 0) <= 0)
+                            return;  // non-blocking
+
+                        // Process keyboard events
+                        const auto& keyboards = keyboard_manager->keyboards();
+                        for (size_t i = 0; i < keyboards.size(); ++i) {
+                            if (i >= pfds.size() || !(pfds[i].revents & POLLIN))
+                                continue;
+
+                            input_event ev{};
+                            while (libevdev_next_event(keyboards[i].evdev(),
+                                                       LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0) {
+                                if (ev.type != EV_KEY)
+                                    continue;
+
+                                if (g_options.verbose) {
+                                    LOG_DEBUG("Key event: code=" + std::to_string(ev.code) +
+                                              " value=" + std::to_string(ev.value) + " from " +
+                                              keyboards[i].name());
+                                }
+
+                                // Check for exit hotkey (Alt+Ctrl+H)
+                                static ExitHotkeyDetector hotkey_detector(true);  // Enable logging
+                                if (hotkey_detector.process_key_event(ev.code, ev.value)) {
+                                    LOG_INFO(
+                                        "Exit hotkey detected (Alt+Ctrl+H) - stopping program...");
+                                    // Send empty reports to release all keys before exit
+                                    if (hid_manager.is_ready()) {
+                                        hid_manager.send_keyboard_report({0, 0, 0, 0, 0, 0, 0, 0});
+                                        hid_manager.send_consumer_control_report({0, 0});
+                                        if (g_options.verbose) {
+                                            LOG_DEBUG("Sent empty HID reports before exit");
+                                        }
+                                    }
+                                    LOG_INFO("Stopping HID reports and exiting...");
+                                    g_running = false;
+                                    app.quit();
+                                    return;
+                                }
+
+                                if (g_options.verbose) {
+                                    LOG_DEBUG("Hotkey state: " +
+                                              hotkey_detector.get_state_description());
+                                }
+
+                                switch (ev.value) {
+                                    case 1:  // key down
+                                    case 2:  // auto-repeat
+                                        // Check if it's a consumer control key first
+                                        if (auto consumer_usage =
+                                                hid::get_consumer_usage(ev.code)) {
+                                            // Handle consumer control keys (media keys)
+                                            auto consumer_report =
+                                                hid::make_consumer_report(ev.code, ev.value);
+                                            if (hid_manager.supports_report_type(
+                                                    ble_hid::HIDReportType::CONSUMER_CONTROL)) {
+                                                hid_manager.send_consumer_control_report(
+                                                    consumer_report);
+                                                if (g_options.verbose) {
+                                                    LOG_DEBUG(
+                                                        "Sent Consumer Control report: [" +
+                                                        std::to_string(consumer_report[0]) + ", " +
+                                                        std::to_string(consumer_report[1]) + "]");
+                                                }
+                                            } else {
+                                                LOG_DEBUG("Consumer control not supported, "
+                                                          "skipping media key");
+                                            }
+                                        } else if (hid::apply_key_event(*kb_state, ev.code,
+                                                                        ev.value)) {
+                                            // Handle regular keyboard keys
+                                            auto report = kb_state->get_report();
+                                            if (hid_manager.supports_report_type(
+                                                    ble_hid::HIDReportType::KEYBOARD_INPUT)) {
+                                                hid_manager.send_keyboard_report(report);
+                                                if (g_options.verbose) {
+                                                    LOG_DEBUG("Sent Keyboard report: [" +
+                                                              std::to_string(report[0]) + ", " +
+                                                              std::to_string(report[1]) + ", " +
+                                                              std::to_string(report[2]) + ", " +
+                                                              std::to_string(report[3]) + ", " +
+                                                              std::to_string(report[4]) + ", " +
+                                                              std::to_string(report[5]) + ", " +
+                                                              std::to_string(report[6]) + ", " +
+                                                              std::to_string(report[7]) + "]");
+                                                }
+                                            } else {
+                                                LOG_DEBUG("Keyboard input not supported");
+                                            }
+                                        }
+                                        break;
+                                    case 0:  // key release
+                                        // Handle key release for consumer control keys
+                                        if (auto consumer_usage =
+                                                hid::get_consumer_usage(ev.code)) {
+                                            // Send consumer control release (all zeros)
+                                            if (hid_manager.supports_report_type(
+                                                    ble_hid::HIDReportType::CONSUMER_CONTROL)) {
+                                                hid_manager.send_consumer_control_report({0, 0});
+                                                if (g_options.verbose) {
+                                                    LOG_DEBUG(
+                                                        "Sent Consumer Control release: [0, 0]");
+                                                }
+                                            }
+                                        } else {
+                                            // Handle regular keyboard key release
+                                            [[maybe_unused]] bool changed =
+                                                hid::apply_key_event(*kb_state, ev.code, ev.value);
+                                            if (hid_manager.supports_report_type(
+                                                    ble_hid::HIDReportType::KEYBOARD_INPUT)) {
+                                                auto report = kb_state->get_report();
+                                                hid_manager.send_keyboard_report(report);
+                                                if (g_options.verbose) {
+                                                    LOG_DEBUG("Sent Keyboard release report: [" +
+                                                              std::to_string(report[0]) + ", " +
+                                                              std::to_string(report[1]) + ", " +
+                                                              std::to_string(report[2]) + ", " +
+                                                              std::to_string(report[3]) + ", " +
+                                                              std::to_string(report[4]) + ", " +
+                                                              std::to_string(report[5]) + ", " +
+                                                              std::to_string(report[6]) + ", " +
+                                                              std::to_string(report[7]) + "]");
+                                                }
+                                            }
+                                        }
+                                        break;
+                                }
                             }
                         }
                     });
-                service->discoverDetails();
-                if (targetChar.isValid())
-                    break;
-            }
-            if (!targetChar.isValid()) {
-                LOG_ERROR("No writable characteristic found");
-                app.quit();
-            }
+                    pollTimer->start();
+                });
+            hid_service->discoverDetails();
         });
 
         // Set up connection timeout (30 seconds)
@@ -534,102 +697,6 @@ int main(int argc, char* argv[]) {
     });
 
     discoveryAgent.start();
-
-    // ------------------ Input processing loop ------------------
-    QTimer pollTimer;
-    pollTimer.setInterval(g_options.poll_interval);
-    QObject::connect(&pollTimer, &QTimer::timeout, [&] {
-        if (!g_running || !sendReport)
-            return;
-
-        // Update device list (handle hot-plug events)
-        if (keyboard_manager.update_devices() && g_options.verbose) {
-            LOG_DEBUG("Device list updated");
-        }
-
-        // Get poll file descriptors
-        std::vector<int> fds = keyboard_manager.get_poll_fds();
-        if (fds.empty())
-            return;
-
-        // Create pollfd structures
-        std::vector<struct pollfd> pfds;
-        pfds.reserve(fds.size());
-        for (int fd : fds) {
-            pfds.push_back({fd, POLLIN, 0});
-        }
-
-        if (poll(pfds.data(), pfds.size(), 0) <= 0)
-            return;  // non-blocking
-
-        // Process keyboard events
-        const auto& keyboards = keyboard_manager.keyboards();
-        for (size_t i = 0; i < keyboards.size(); ++i) {
-            if (i >= pfds.size() || !(pfds[i].revents & POLLIN))
-                continue;
-
-            input_event ev{};
-            while (libevdev_next_event(keyboards[i].evdev(), LIBEVDEV_READ_FLAG_NORMAL, &ev) == 0) {
-                if (ev.type != EV_KEY)
-                    continue;
-
-                if (g_options.verbose) {
-                    LOG_DEBUG("Key event: code=" + std::to_string(ev.code) + " value=" +
-                              std::to_string(ev.value) + " from " + keyboards[i].name());
-                }
-
-                // Check for exit hotkey (Alt+Ctrl+H)
-                static ExitHotkeyDetector hotkey_detector(true);  // Enable logging
-                if (hotkey_detector.process_key_event(ev.code, ev.value)) {
-                    LOG_INFO("Exit hotkey detected (Alt+Ctrl+H) - stopping program...");
-                    // Send empty report to release all keys before exit
-                    if (sendReport) {
-                        sendReport({0, 0, 0, 0, 0, 0, 0, 0});
-                        if (g_options.verbose) {
-                            LOG_DEBUG("Sent empty HID report before exit");
-                        }
-                    }
-                    LOG_INFO("Stopping HID reports and exiting...");
-                    g_running = false;
-                    app.quit();
-                    return;
-                }
-
-                if (g_options.verbose) {
-                    LOG_DEBUG("Hotkey state: " + hotkey_detector.get_state_description());
-                }
-
-                switch (ev.value) {
-                    case 1:  // key down
-                    case 2:  // auto-repeat
-                        if (hid::apply_key_event(kb_state, ev.code, ev.value)) {
-                            auto report = kb_state.get_report();
-                            sendReport(report);
-                            if (g_options.verbose) {
-                                LOG_DEBUG(
-                                    "Sent HID report: [" + std::to_string(report[0]) + ", " +
-                                    std::to_string(report[1]) + ", " + std::to_string(report[2]) +
-                                    ", " + std::to_string(report[3]) + ", " +
-                                    std::to_string(report[4]) + ", " + std::to_string(report[5]) +
-                                    ", " + std::to_string(report[6]) + ", " +
-                                    std::to_string(report[7]) + "]");
-                            }
-                        }
-                        break;
-                    case 0:  // key release
-                        [[maybe_unused]] bool changed =
-                            hid::apply_key_event(kb_state, ev.code, ev.value);
-                        // Send all-zero release report to stop the key
-                        sendReport({0, 0, 0, 0, 0, 0, 0, 0});
-                        if (g_options.verbose) {
-                            LOG_DEBUG("Sent key release HID report: [0, 0, 0, 0, 0, 0, 0, 0]");
-                        }
-                        break;
-                }
-            }
-        }
-    });
-    pollTimer.start();
 
     int ret = app.exec();
     return ret;
