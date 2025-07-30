@@ -64,13 +64,6 @@ mkdir build && cd build
 cmake ..
 make
 
-# Build with tests (optional)
-cmake .. -DBUILD_TESTS=ON
-make
-
-# Run tests
-ctest
-
 # Or use ninja if available
 cmake -G Ninja ..
 ninja
@@ -314,11 +307,8 @@ cd ninjaUSB-util
 
 # Build with all features enabled
 mkdir build && cd build
-cmake .. -DBUILD_TESTS=ON -DBUILD_DOCS=ON -DCMAKE_BUILD_TYPE=Debug
+cmake .. -DBUILD_DOCS=ON -DCMAKE_BUILD_TYPE=Debug
 make -j$(nproc)
-
-# Run tests to verify build
-ctest --output-on-failure
 ```
 
 ## Advanced Usage
@@ -442,7 +432,6 @@ For more detailed information, see:
 
 - **[Architecture Guide](ARCHITECTURE.md)** - Technical system design and components
 - **[Development Guide](DEVELOPMENT.md)** - Contributing and development setup
-- **[Testing Guide](TESTING.md)** - Testing procedures and validation
 - **[Contributing Guide](CONTRIBUTING.md)** - How to contribute to the project
 - **[Versioning Guide](VERSIONING.md)** - Version management and release process
 
@@ -472,12 +461,11 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 - Code contribution guidelines
 - Development environment setup
-- Testing requirements
 - Documentation standards
 
 ## Version Information
 
-Current version: **1.0.0-dev** (Development Release)
+Current version: **1.0.0-alpha** (Alpha Release)
 
 For version history and changelog, see:
 
