@@ -54,7 +54,7 @@ sudo zypper install libudev-devel libevdev-devel
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/mr-u0b0dy/ninjaUSB-util.git
 cd ninjaUSB-util
 
 # Create build directory
