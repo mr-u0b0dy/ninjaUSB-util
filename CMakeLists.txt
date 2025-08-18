@@ -200,60 +200,26 @@ if(BUILD_TESTS)
         src/logger.cpp
     )
     
-    target_include_directories(
-        test_device_manager PRIVATE 
-        src/inc 
-        ${CMAKE_CURRENT_BINARY_DIR}/include
-        ${LIBUDEV_INCLUDE_DIRS}
-        ${LIBEVDEV_INCLUDE_DIRS}
-    )
+    # Common include dirs for tests now include tests directory for test_framework.hpp
+    foreach(tgt IN ITEMS 
+        test_device_manager test_args test_hid_keycodes test_logger 
+        test_hotkey_detector test_signal_handler test_make_report_writer 
+        test_ble_hid_service_manager)
+        target_include_directories(${tgt} PRIVATE 
+            src/inc 
+            tests
+            ${CMAKE_CURRENT_BINARY_DIR}/include
+            ${LIBUDEV_INCLUDE_DIRS}
+            ${LIBEVDEV_INCLUDE_DIRS}
+        )
+    endforeach()
     
+    # Remove duplicated target_include_directories blocks above
+    # Link libraries where needed
     target_link_libraries(
         test_device_manager PRIVATE 
         ${LIBUDEV_LINK_LIBRARIES} 
         ${LIBEVDEV_LINK_LIBRARIES}
-    )
-    
-    target_include_directories(
-        test_args PRIVATE 
-        src/inc
-        ${CMAKE_CURRENT_BINARY_DIR}/include
-    )
-    
-    target_include_directories(
-        test_hid_keycodes PRIVATE 
-        src/inc
-        ${CMAKE_CURRENT_BINARY_DIR}/include
-    )
-    
-    target_include_directories(
-        test_logger PRIVATE 
-        src/inc
-        ${CMAKE_CURRENT_BINARY_DIR}/include
-    )
-    
-    target_include_directories(
-        test_hotkey_detector PRIVATE 
-        src/inc
-        ${CMAKE_CURRENT_BINARY_DIR}/include
-    )
-    
-    target_include_directories(
-        test_signal_handler PRIVATE 
-        src/inc
-        ${CMAKE_CURRENT_BINARY_DIR}/include
-    )
-    
-    target_include_directories(
-        test_make_report_writer PRIVATE 
-        src/inc
-        ${CMAKE_CURRENT_BINARY_DIR}/include
-    )
-    
-    target_include_directories(
-        test_ble_hid_service_manager PRIVATE 
-        src/inc
-        ${CMAKE_CURRENT_BINARY_DIR}/include
     )
     
     target_link_libraries(

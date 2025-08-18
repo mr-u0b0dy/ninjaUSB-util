@@ -15,9 +15,6 @@
 
 namespace test_framework {
 
-/**
- * @brief Structure to hold test information
- */
 struct TestCase {
     std::string name;
     std::function<void()> test_function;
@@ -26,23 +23,12 @@ struct TestCase {
         : name(test_name), test_function(test_func) {}
 };
 
-/**
- * @brief Wrapper function to add standard test output
- * @param test_name Name of the test for output
- * @param test_func Test function to execute
- */
 inline void run_test_with_output(const std::string& test_name, std::function<void()> test_func) {
     std::cout << "Testing " << test_name << "... ";
     test_func();
     std::cout << "PASSED\n";
 }
 
-/**
- * @brief Run a series of test cases with common error handling
- * @param test_suite_name Name of the test suite for display
- * @param test_cases Vector of test cases to execute
- * @return 0 on success, 1 on failure
- */
 inline int run_test_suite(const std::string& test_suite_name,
                           const std::vector<TestCase>& test_cases) {
     std::cout << "=== " << test_suite_name << " ===\n";

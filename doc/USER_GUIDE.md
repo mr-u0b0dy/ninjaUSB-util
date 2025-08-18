@@ -432,6 +432,7 @@ For more detailed information, see:
 
 - **[Architecture Guide](ARCHITECTURE.md)** - Technical system design and components
 - **[Development Guide](DEVELOPMENT.md)** - Contributing and development setup
+- **[Testing Guide](TESTING.md)** - Testing procedures and validation
 - **[Contributing Guide](CONTRIBUTING.md)** - How to contribute to the project
 - **[Versioning Guide](VERSIONING.md)** - Version management and release process
 
