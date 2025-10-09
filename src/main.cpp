@@ -108,6 +108,34 @@ void signal_handler(int signum) {
     g_running = false;
 }
 
+/**
+ * @brief Perform graceful shutdown with BLE disconnection and HID cleanup
+ * @param controller BLE controller to disconnect (can be nullptr)
+ * @param hid_manager HID service manager for sending empty reports
+ * @param verbose Whether to log debug messages
+ */
+void graceful_shutdown(QLowEnergyController* controller, 
+                      ble_hid::HIDServiceManager& hid_manager,
+                      bool verbose = false) {
+    // Send empty HID reports to release all keys before disconnect
+    if (hid_manager.is_ready()) {
+        hid_manager.send_keyboard_report({0, 0, 0, 0, 0, 0, 0, 0});
+        hid_manager.send_consumer_control_report({0, 0});
+        if (verbose) {
+            LOG_DEBUG("Sent empty HID reports before disconnect");
+        }
+    }
+
+    // Disconnect BLE controller if connected
+    if (controller && controller->state() == QLowEnergyController::ConnectedState) {
+        LOG_INFO("Disconnecting from BLE device...");
+        controller->disconnectFromDevice();
+        if (verbose) {
+            LOG_DEBUG("BLE disconnect request sent");
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 //  Main Application Entry Point
 // ---------------------------------------------------------------------------
@@ -381,6 +409,7 @@ int main(int argc, char* argv[]) {
                         break;
                 }
                 LOG_ERROR("BLE connection failed: " + errorString.toStdString());
+                graceful_shutdown(controller, hid_manager, g_options.verbose);
                 g_running = false;
                 app.quit();
             });
@@ -564,14 +593,7 @@ int main(int argc, char* argv[]) {
                                 if (hotkey_detector.process_key_event(ev.code, ev.value)) {
                                     LOG_INFO(
                                         "Exit hotkey detected (Alt+Ctrl+H) - stopping program...");
-                                    // Send empty reports to release all keys before exit
-                                    if (hid_manager.is_ready()) {
-                                        hid_manager.send_keyboard_report({0, 0, 0, 0, 0, 0, 0, 0});
-                                        hid_manager.send_consumer_control_report({0, 0});
-                                        if (g_options.verbose) {
-                                            LOG_DEBUG("Sent empty HID reports before exit");
-                                        }
-                                    }
+                                    graceful_shutdown(controller, hid_manager, g_options.verbose);
                                     LOG_INFO("Stopping HID reports and exiting...");
                                     g_running = false;
                                     app.quit();
@@ -680,6 +702,7 @@ int main(int argc, char* argv[]) {
 
         QObject::connect(connectionTimer, &QTimer::timeout, [&, connectionTimer]() {
             LOG_ERROR("BLE connection timeout - failed to connect within 30 seconds");
+            graceful_shutdown(controller, hid_manager, g_options.verbose);
             connectionTimer->deleteLater();
             g_running = false;
             app.quit();
@@ -699,5 +722,11 @@ int main(int argc, char* argv[]) {
     discoveryAgent.start();
 
     int ret = app.exec();
+    
+    // Perform graceful shutdown when exiting normally (e.g., via signal)
+    if (controller) {
+        graceful_shutdown(controller, hid_manager, g_options.verbose);
+    }
+    
     return ret;
 }
