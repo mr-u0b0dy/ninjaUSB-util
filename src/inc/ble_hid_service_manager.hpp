@@ -68,6 +68,21 @@ constexpr const char* BOOT_KEYBOARD_INPUT_REPORT_UUID = "00002a22-0000-1000-8000
 constexpr const char* BOOT_KEYBOARD_OUTPUT_REPORT_UUID = "00002a32-0000-1000-8000-00805f9b34fb";
 
 // ---------------------------------------------------------------------------
+//  Custom (Vendor-Specific) Service / Characteristic UUIDs
+// ---------------------------------------------------------------------------
+/**
+ * @brief Custom vendor-specific primary service UUID (128-bit)
+ * Matches firmware definition: 12345678-1234-5678-1234-56789abcdef0
+ */
+constexpr const char* CUSTOM_INPUT_SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0";
+
+/**
+ * @brief Custom command / report characteristic UUID (128-bit)
+ * Matches firmware definition: abcdef01-2345-6789-2345-6789abcdef01
+ */
+constexpr const char* CUSTOM_COMMAND_CHAR_UUID = "abcdef01-2345-6789-2345-6789abcdef01";
+
+// ---------------------------------------------------------------------------
 //  HID Report Types and Identifiers
 // ---------------------------------------------------------------------------
 

@@ -42,6 +42,29 @@ constexpr const char* INPUT_SUBSYSTEM = "input";      //!< udev subsystem name f
 constexpr const char* UDEV_SOURCE = "udev";           //!< udev event source identifier
 constexpr const char* ACTION_ADD = "add";             //!< udev action for device addition
 constexpr const char* ACTION_REMOVE = "remove";       //!< udev action for device removal
+
+/**
+ * @brief Check if a libevdev device appears to be our own Zephyr NinjaUSB device
+ *
+ * We avoid grabbing exclusive access for this device to prevent interfering
+ * with its normal operation or creating feedback loops. Detection is based on
+ * a simple case-insensitive substring match on the device name.
+ */
+bool is_own_ninjausb_device(libevdev* dev) noexcept {
+    if (!dev) return false;
+    const char* name = libevdev_get_name(dev);
+    if (!name) return false;
+    std::string s(name);
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
+    return s.find("ninjausb") != std::string::npos;
+}
+
+// Helper that checks an arbitrary device name string for the NinjaUSB substring
+bool name_contains_ninjausb(const std::string& name) noexcept {
+    std::string s = name;
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
+    return s.find("ninjausb") != std::string::npos;
+}
 }  // namespace
 
 /**
@@ -125,18 +148,23 @@ KeyboardDevice::KeyboardDevice(const std::string& device_path)
         return;
     }
 
-    // Grab exclusive access to prevent keystrokes from reaching the host system
-    if (libevdev_grab(evdev_, LIBEVDEV_GRAB) < 0) {
-        log_error("Failed to grab exclusive access to device: " + device_path + " (" +
-                  std::strerror(errno) + ")");
-        // Continue anyway - device will work but keystrokes may leak to host
-    } else {
-        log_debug("Grabbed exclusive access to keyboard: " + device_path);
-    }
-
     // Cache device name
     const char* dev_name = libevdev_get_name(evdev_);
     name_ = dev_name ? dev_name : "Unknown Device";
+
+    // Grab exclusive access to prevent keystrokes from reaching the host system
+    // Skip grabbing for our own Zephyr NinjaUSB device (by name match)
+    if (is_own_ninjausb_device(evdev_)) {
+        log_info("Detected NinjaUSB device; skipping exclusive grab: " + path_ + " (" + name_ + ")");
+    } else {
+        if (libevdev_grab(evdev_, LIBEVDEV_GRAB) < 0) {
+            log_error("Failed to grab exclusive access to device: " + device_path + " (" +
+                      std::strerror(errno) + ")");
+            // Continue anyway - device will work but keystrokes may leak to host
+        } else {
+            log_debug("Grabbed exclusive access to keyboard: " + device_path);
+        }
+    }
 
     log_debug("Added keyboard: " + path_ + " (" + name_ + ")");
 }
@@ -374,7 +402,13 @@ std::vector<KeyboardDevice> DeviceMonitor::enumerate_keyboards() const {
             if (devnode && std::strstr(devnode, EVENT_DEVICE_PREFIX)) {
                 KeyboardDevice kbd(devnode);
                 if (kbd.is_valid()) {
-                    keyboards.emplace_back(std::move(kbd));
+                    // Skip devices that appear to be our own NinjaUSB device
+                    if (name_contains_ninjausb(kbd.name())) {
+                        log_info("Ignoring NinjaUSB device during enumeration: " + std::string(devnode) + " (" + kbd.name() + ")");
+                        // ensure any resources are cleaned up by destructor
+                    } else {
+                        keyboards.emplace_back(std::move(kbd));
+                    }
                 }
             }
             udev_device_unref(dev);
@@ -584,6 +618,11 @@ void KeyboardManager::add_device(const std::string& device_path) {
 
     KeyboardDevice kbd(device_path);
     if (kbd.is_valid()) {
+        // Skip adding our own NinjaUSB device to avoid feedback and interference
+        if (name_contains_ninjausb(kbd.name())) {
+            log_info("Ignoring NinjaUSB device on add: " + device_path + " (" + kbd.name() + ")");
+            return;
+        }
         keyboards_.emplace_back(std::move(kbd));
     }
 }
